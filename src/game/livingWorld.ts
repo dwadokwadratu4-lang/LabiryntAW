@@ -705,12 +705,6 @@ function createTirGroup(
   trailer.position.set(0, 0.25, -0.22);
   trailer.castShadow = true;
 
-  // Red roof/side accent badge so the forklift motif is recognizable even from above
-  const topMarkMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-  const topMarkGeo = new THREE.BoxGeometry(0.18, 0.02, 0.12);
-  const topMark = new THREE.Mesh(topMarkGeo, topMarkMat);
-  topMark.position.set(0, 0.435, -0.52);
-
   // Wheels
   const wheelGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.055, 10);
   wheelGeo.rotateZ(Math.PI / 2);
@@ -734,19 +728,190 @@ function createTirGroup(
   hitMesh.position.y = 0.24;
   hitMesh.userData.interactable = { type: 'car', index } as InteractableHit;
 
-  g.add(cab, wind, hl1, hl2, trailer, topMark, hitMesh);
+  g.add(cab, wind, hl1, hl2, trailer, hitMesh);
   disposables.push(
     cabGeo,
     windGeo,
     hlGeo,
     trailerGeo,
-    topMarkMat,
-    topMarkGeo,
     wheelGeo,
     hitGeo,
     hitMat
   );
   return g;
+}
+
+const F1_LOOP: string[] = ['n7', 'w78', 'n9', 'n4', 'n5', 'n6', 'n7'];
+
+function createF1YellowCarGroup(
+  index: number,
+  disposables: Array<{ dispose: () => void }>
+): THREE.Group {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xfacc15,
+    roughness: 0.22,
+    metalness: 0.35,
+  });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
+  const wingMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.4 });
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+  disposables.push(bodyMat, glassMat, tireMat, wingMat, headMat);
+
+  // Crisp roof texture with black digit "1"
+  const roofCanvas = document.createElement('canvas');
+  roofCanvas.width = 128;
+  roofCanvas.height = 128;
+  const rCtx = roofCanvas.getContext('2d')!;
+  rCtx.fillStyle = '#facc15';
+  rCtx.fillRect(0, 0, 128, 128);
+  rCtx.beginPath();
+  rCtx.arc(64, 64, 46, 0, Math.PI * 2);
+  rCtx.fillStyle = '#fef9c3';
+  rCtx.fill();
+  rCtx.lineWidth = 5;
+  rCtx.strokeStyle = '#111827';
+  rCtx.stroke();
+  rCtx.fillStyle = '#0a0a0a';
+  rCtx.font = '900 74px "Outfit", sans-serif';
+  rCtx.textAlign = 'center';
+  rCtx.textBaseline = 'middle';
+  rCtx.fillText('1', 64, 67);
+  const roofTex = new THREE.CanvasTexture(roofCanvas);
+  roofTex.colorSpace = THREE.SRGBColorSpace;
+  roofTex.needsUpdate = true;
+  const roofTopMat = new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.28 });
+  disposables.push(roofTex, roofTopMat);
+
+  const chassisGeo = new THREE.BoxGeometry(0.3, 0.12, 0.58);
+  const chassis = new THREE.Mesh(chassisGeo, bodyMat);
+  chassis.position.y = 0.12;
+  chassis.castShadow = true;
+
+  const cabinGeo = new THREE.BoxGeometry(0.25, 0.11, 0.29);
+  const cabin = new THREE.Mesh(cabinGeo, glassMat);
+  cabin.position.set(0, 0.22, -0.02);
+  cabin.castShadow = true;
+
+  const roofGeo = new THREE.BoxGeometry(0.24, 0.035, 0.26);
+  const roof = new THREE.Mesh(roofGeo, [
+    bodyMat,
+    bodyMat,
+    roofTopMat,
+    bodyMat,
+    bodyMat,
+    bodyMat,
+  ]);
+  roof.position.set(0, 0.29, -0.02);
+
+  // Subtle racing rear spoiler
+  const spoilerGeo = new THREE.BoxGeometry(0.32, 0.03, 0.08);
+  const spoiler = new THREE.Mesh(spoilerGeo, wingMat);
+  spoiler.position.set(0, 0.24, -0.27);
+
+  const wheelGeo = new THREE.CylinderGeometry(0.065, 0.065, 0.055, 10);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wheelCoords: [number, number][] = [
+    [-0.16, 0.17],
+    [0.16, 0.17],
+    [-0.16, -0.17],
+    [0.16, -0.17],
+  ];
+  for (const [wx, wz] of wheelCoords) {
+    const w = new THREE.Mesh(wheelGeo, tireMat);
+    w.position.set(wx, 0.065, wz);
+    g.add(w);
+  }
+
+  const lightGeo = new THREE.BoxGeometry(0.065, 0.038, 0.028);
+  const hl1 = new THREE.Mesh(lightGeo, headMat);
+  hl1.position.set(-0.09, 0.11, 0.295);
+  const hl2 = new THREE.Mesh(lightGeo, headMat);
+  hl2.position.set(0.09, 0.11, 0.295);
+
+  const hitGeo = new THREE.SphereGeometry(0.45, 8, 8);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+  hitMesh.position.y = 0.2;
+  hitMesh.userData.interactable = { type: 'car', index } as InteractableHit;
+
+  g.add(chassis, cabin, roof, spoiler, hl1, hl2, hitMesh);
+  // 80% scale of standard passenger cars
+  g.scale.setScalar(0.8);
+  disposables.push(chassisGeo, cabinGeo, roofGeo, spoilerGeo, wheelGeo, lightGeo, hitGeo, hitMat);
+  return g;
+}
+
+function createStorkGroup(disposables: Array<{ dispose: () => void }>): {
+  group: THREE.Group;
+  wingL: THREE.Group;
+  wingR: THREE.Group;
+} {
+  const g = new THREE.Group();
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.65 });
+  const blackMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.7 });
+  const redMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45 });
+  disposables.push(whiteMat, blackMat, redMat);
+
+  const bodyGeo = new THREE.SphereGeometry(0.14, 10, 8);
+  bodyGeo.scale(0.85, 0.75, 1.85);
+  const body = new THREE.Mesh(bodyGeo, whiteMat);
+  body.castShadow = true;
+
+  // Slender outstretched white neck + head
+  const neckGeo = new THREE.CylinderGeometry(0.036, 0.052, 0.38, 8);
+  neckGeo.rotateX(Math.PI / 2);
+  const neck = new THREE.Mesh(neckGeo, whiteMat);
+  neck.position.set(0, 0.03, 0.36);
+  neck.castShadow = true;
+
+  const headGeo = new THREE.SphereGeometry(0.06, 8, 8);
+  const head = new THREE.Mesh(headGeo, whiteMat);
+  head.position.set(0, 0.04, 0.56);
+
+  // Pointed red beak
+  const beakGeo = new THREE.ConeGeometry(0.026, 0.26, 8);
+  beakGeo.rotateX(Math.PI / 2);
+  const beak = new THREE.Mesh(beakGeo, redMat);
+  beak.position.set(0, 0.035, 0.72);
+  beak.castShadow = true;
+
+  // Long trailing red legs
+  const legGeo = new THREE.CylinderGeometry(0.014, 0.012, 0.48, 6);
+  legGeo.rotateX(Math.PI / 2);
+  const legL = new THREE.Mesh(legGeo, redMat);
+  legL.position.set(-0.045, -0.03, -0.44);
+  const legR = new THREE.Mesh(legGeo, redMat);
+  legR.position.set(0.045, -0.03, -0.44);
+
+  // Flapping wings: white inner covert + black outer flight feathers (lotki)
+  const innerWingGeo = new THREE.BoxGeometry(0.42, 0.025, 0.24);
+  const outerWingGeo = new THREE.BoxGeometry(0.44, 0.022, 0.22);
+
+  const wingL = new THREE.Group();
+  wingL.position.set(-0.08, 0.04, 0.04);
+  const wInnerL = new THREE.Mesh(innerWingGeo, whiteMat);
+  wInnerL.position.set(-0.21, 0, 0);
+  wInnerL.castShadow = true;
+  const wOuterL = new THREE.Mesh(outerWingGeo, blackMat);
+  wOuterL.position.set(-0.62, 0, -0.02);
+  wOuterL.castShadow = true;
+  wingL.add(wInnerL, wOuterL);
+
+  const wingR = new THREE.Group();
+  wingR.position.set(0.08, 0.04, 0.04);
+  const wInnerR = new THREE.Mesh(innerWingGeo, whiteMat);
+  wInnerR.position.set(0.21, 0, 0);
+  wInnerR.castShadow = true;
+  const wOuterR = new THREE.Mesh(outerWingGeo, blackMat);
+  wOuterR.position.set(0.62, 0, -0.02);
+  wOuterR.castShadow = true;
+  wingR.add(wInnerR, wOuterR);
+
+  g.add(body, neck, head, beak, legL, legR, wingL, wingR);
+  disposables.push(bodyGeo, neckGeo, headGeo, beakGeo, legGeo, innerWingGeo, outerWingGeo);
+  return { group: g, wingL, wingR };
 }
 
 interface AnimalEntity {
@@ -1318,6 +1483,24 @@ export function buildLivingWorld(): LivingWorldController {
   let roadworkX = 0;
   let roadworkZ = 0;
 
+  // 4d. Special Rare Event (max 2 times per entire game): Yellow F1 #1 Car on Pietrowice -> Racibórz -> Modzurów loop
+  const f1CarGroup = createF1YellowCarGroup(101, disposables);
+  f1CarGroup.visible = false;
+  group.add(f1CarGroup);
+  interactables.push(f1CarGroup);
+
+  let f1Active = false;
+  let f1SpawnsDone = 0;
+  let f1Cooldown = 14.0 + Math.random() * 6.0;
+  let f1SegIdx = 0;
+  let f1Dir: 1 | -1 = 1;
+  let f1T = 0;
+  let f1X = 0;
+  let f1Z = 0;
+  let f1EngineTimer = 0;
+  let f1BlockedTimer = 0;
+  let f1ReverseGraceTimer = 0;
+
   // 5. Deer & White Sheep roaming meadows & forest edges
   const animalSeeds: Array<{ kind: 'deer' | 'sheep'; hx: number; hz: number }> = [
     { kind: 'deer', hx: 4.5, hz: -3.9 },
@@ -1369,6 +1552,16 @@ export function buildLivingWorld(): LivingWorldController {
   let paraActive = false;
   let paraProgress = 0;
 
+  // 8. Przelatujący biały bocian nad polami i rzeką Odrą
+  const stork = createStorkGroup(disposables);
+  stork.group.visible = false;
+  group.add(stork.group);
+  let storkActive = false;
+  let storkTimer = 15.0; // triggers at >= 22s (~7s into gameplay)
+  let storkProgress = 0;
+  let storkStart: [number, number] = [-13.5, 8.0];
+  let storkEnd: [number, number] = [13.5, -7.5];
+
   const pickNextAnimalTarget = (a: AnimalEntity, preferSafeField: boolean) => {
     for (let attempt = 0; attempt < 20; attempt++) {
       const ang = Math.random() * Math.PI * 2;
@@ -1409,6 +1602,8 @@ export function buildLivingWorld(): LivingWorldController {
         tir.hornCooldown = 1.0;
       } else if (hit.index === 100) {
         soundEngine.playFireSiren();
+      } else if (hit.index === 101) {
+        soundEngine.playF1Engine();
       } else {
         const c = cars[hit.index];
         if (c) {
@@ -2023,6 +2218,161 @@ export function buildLivingWorld(): LivingWorldController {
         paramotor.group.rotation.y = Math.atan2(nx - px, nz - pz);
         paramotor.group.rotation.z = Math.cos(paraProgress * Math.PI * 1.35) * 0.14;
         paramotor.propeller.rotation.z += dt * 38;
+      }
+    }
+
+    // 7. Update Special Yellow F1 #1 Car (max 2 spawns across the entire game)
+    if (!f1Active) {
+      if (f1SpawnsDone < 2) {
+        f1Cooldown -= dt;
+        if (f1Cooldown <= 0) {
+          f1Active = true;
+          f1SpawnsDone += 1;
+          f1SegIdx = 0;
+          f1Dir = 1;
+          f1T = 0;
+          f1EngineTimer = 0;
+          f1BlockedTimer = 0;
+          f1ReverseGraceTimer = 0;
+          const startPt = CAR_GRAPH_POINTS[F1_LOOP[0]];
+          f1X = startPt[0];
+          f1Z = startPt[1];
+          f1CarGroup.position.set(f1X, 0.0, f1Z);
+          f1CarGroup.visible = true;
+          soundEngine.playF1Engine();
+        }
+      }
+    } else {
+      if (f1ReverseGraceTimer > 0) f1ReverseGraceTimer = Math.max(0, f1ReverseGraceTimer - dt);
+
+      f1EngineTimer += dt;
+      if (f1EngineTimer >= 2.0) {
+        f1EngineTimer = 0;
+        soundEngine.playF1Engine();
+      }
+
+      const prevF1X = f1X;
+      const prevF1Z = f1Z;
+      const f1RoadworkBlock =
+        roadworkActive &&
+        f1ReverseGraceTimer <= 0 &&
+        Math.hypot(f1X - roadworkX, f1Z - roadworkZ) < 0.95;
+
+      if (!f1RoadworkBlock) {
+        const fromKey = F1_LOOP[f1SegIdx];
+        const nextIdx = f1SegIdx + f1Dir;
+        if (nextIdx < 0 || nextIdx >= F1_LOOP.length) {
+          f1Active = false;
+          f1CarGroup.visible = false;
+          f1Cooldown = 36.0 + Math.random() * 14.0;
+        } else {
+          const toKey = F1_LOOP[nextIdx];
+          const p1 = CAR_GRAPH_POINTS[fromKey];
+          const p2 = CAR_GRAPH_POINTS[toKey];
+          const dx = p2[0] - p1[0];
+          const dz = p2[1] - p1[1];
+          const segLen = Math.max(0.1, Math.hypot(dx, dz));
+          f1T += (3.45 * dt) / segLen;
+
+          if (f1T >= 1) {
+            f1SegIdx = nextIdx;
+            f1T = 0;
+            const checkNext = f1SegIdx + f1Dir;
+            if (checkNext < 0 || checkNext >= F1_LOOP.length) {
+              f1Active = false;
+              f1CarGroup.visible = false;
+              f1Cooldown = 36.0 + Math.random() * 14.0;
+            }
+          }
+
+          if (f1Active) {
+            const curFrom = F1_LOOP[f1SegIdx];
+            const curTo = F1_LOOP[f1SegIdx + f1Dir];
+            const a = CAR_GRAPH_POINTS[curFrom];
+            const b = CAR_GRAPH_POINTS[curTo];
+            const sdx = b[0] - a[0];
+            const sdz = b[1] - a[1];
+            const slen = Math.hypot(sdx, sdz) || 1;
+            f1X = a[0] + sdx * f1T + (-sdz / slen) * 0.18;
+            f1Z = a[1] + sdz * f1T + (sdx / slen) * 0.18;
+            f1CarGroup.position.set(f1X, 0.0, f1Z);
+            f1CarGroup.rotation.y = Math.atan2(sdx, sdz);
+          }
+        }
+      }
+
+      if (f1Active) {
+        const f1Moved = Math.hypot(f1X - prevF1X, f1Z - prevF1Z);
+        let f1Blocked = f1RoadworkBlock || f1Moved < 3.45 * dt * 0.12;
+        const minSep = BALL_RADIUS + 0.28;
+        for (const ball of balls) {
+          if (ball.state !== 'active') continue;
+          const dx = ball.x - f1X;
+          const dz = ball.z - f1Z;
+          const dist = Math.hypot(dx, dz);
+          if (dist < minSep + 0.16) f1Blocked = true;
+          if (dist > 0.001 && dist < minSep) {
+            const nx = dx / dist;
+            const nz = dz / dist;
+            ball.x += nx * (minSep - dist);
+            ball.z += nz * (minSep - dist);
+            ball.vx += nx * 6.2;
+            ball.vz += nz * 6.2;
+          }
+        }
+
+        if (f1Blocked && f1ReverseGraceTimer <= 0) {
+          f1BlockedTimer += dt;
+          if (f1BlockedTimer >= 2.0) {
+            const nxt = f1SegIdx + f1Dir;
+            if (nxt >= 0 && nxt < F1_LOOP.length) {
+              f1SegIdx = nxt;
+              f1Dir = f1Dir === 1 ? -1 : 1;
+              f1T = Math.min(0.95, Math.max(0.04, 1 - f1T + 0.03));
+            } else {
+              f1Dir = f1Dir === 1 ? -1 : 1;
+              f1T = 0.05;
+            }
+            f1BlockedTimer = 0;
+            f1ReverseGraceTimer = 0.85;
+            soundEngine.playF1Engine();
+          }
+        } else if (!f1Blocked) {
+          f1BlockedTimer = Math.max(0, f1BlockedTimer - dt * 2);
+        }
+      }
+    }
+
+    // 8. Update Flying White Stork (Bocian nad polami i Odrą)
+    if (!storkActive) {
+      storkTimer += dt;
+      if (storkTimer >= 22.0) {
+        storkActive = true;
+        storkTimer = 0;
+        storkProgress = 0;
+        const flip = Math.random() < 0.5;
+        storkStart = flip ? [-13.5, 7.5] : [13.0, -9.0];
+        storkEnd = flip ? [13.5, -6.5] : [-13.5, 6.5];
+        stork.group.visible = true;
+        soundEngine.playStorkClatter();
+      }
+    } else {
+      storkProgress += dt / 12.5;
+      if (storkProgress >= 1) {
+        storkActive = false;
+        stork.group.visible = false;
+      } else {
+        const sx = THREE.MathUtils.lerp(storkStart[0], storkEnd[0], storkProgress);
+        const sz = THREE.MathUtils.lerp(storkStart[1], storkEnd[1], storkProgress);
+        const sy = 4.15 + Math.sin(storkProgress * Math.PI) * 0.55;
+        stork.group.position.set(sx, sy, sz);
+        stork.group.rotation.y = Math.atan2(
+          storkEnd[0] - storkStart[0],
+          storkEnd[1] - storkStart[1]
+        );
+        const slowFlap = Math.sin(elapsed * 4.6) * 0.44;
+        stork.wingL.rotation.z = slowFlap;
+        stork.wingR.rotation.z = -slowFlap;
       }
     }
   };

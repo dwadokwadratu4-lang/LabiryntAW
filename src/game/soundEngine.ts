@@ -10,6 +10,8 @@ class SoundEngine {
   private lastParamotorTime = 0;
   private lastSirenTime = 0;
   private lastBeepTime = 0;
+  private lastF1Time = 0;
+  private lastStorkTime = 0;
 
   private ensureContext(): AudioContext | null {
     if (this.muted || typeof window === 'undefined') return null;
@@ -375,6 +377,100 @@ class SoundEngine {
       osc.start(start);
       osc.stop(start + 0.15);
     });
+  }
+
+  public playF1Engine(): void {
+    const ctx = this.ensureContext();
+    this.vibrate(25);
+    if (!ctx) return;
+
+    const nowMs = performance.now();
+    if (nowMs - this.lastF1Time < 1800) return;
+    this.lastF1Time = nowMs;
+
+    const t = ctx.currentTime;
+    const dur = 2.05;
+
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    // High-pitched Formula 1 V10 scream with crisp gearshift steps
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(280, t);
+    osc1.frequency.exponentialRampToValueAtTime(640, t + 0.52);
+    osc1.frequency.setValueAtTime(450, t + 0.54);
+    osc1.frequency.exponentialRampToValueAtTime(790, t + 1.25);
+    osc1.frequency.setValueAtTime(590, t + 1.27);
+    osc1.frequency.exponentialRampToValueAtTime(860, t + 1.72);
+    osc1.frequency.exponentialRampToValueAtTime(440, t + dur);
+
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(560, t);
+    osc2.frequency.exponentialRampToValueAtTime(1280, t + 0.52);
+    osc2.frequency.setValueAtTime(900, t + 0.54);
+    osc2.frequency.exponentialRampToValueAtTime(1580, t + 1.25);
+    osc2.frequency.setValueAtTime(1180, t + 1.27);
+    osc2.frequency.exponentialRampToValueAtTime(1720, t + 1.72);
+    osc2.frequency.exponentialRampToValueAtTime(880, t + dur);
+
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1450, t);
+    filter.Q.setValueAtTime(1.6, t);
+
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.linearRampToValueAtTime(0.11, t + 0.14);
+    gain.gain.setValueAtTime(0.1, t + dur - 0.32);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc1.start(t);
+    osc2.start(t);
+    osc1.stop(t + dur + 0.04);
+    osc2.stop(t + dur + 0.04);
+  }
+
+  public playStorkClatter(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const nowMs = performance.now();
+    if (nowMs - this.lastStorkTime < 5500) return;
+    this.lastStorkTime = nowMs;
+
+    const t = ctx.currentTime;
+    // Soft woody stork bill-clatter burst
+    const claps = 11;
+    for (let i = 0; i < claps; i++) {
+      const start = t + i * 0.068 + (i > 6 ? (i - 6) * 0.015 : 0);
+      const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(860 + (i % 3) * 90, start);
+      osc.frequency.exponentialRampToValueAtTime(240, start + 0.024);
+
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1550, start);
+      filter.Q.setValueAtTime(2.8, start);
+
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(0.036, start + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.028);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + 0.032);
+    }
   }
 
   public playTrapBell(): void {

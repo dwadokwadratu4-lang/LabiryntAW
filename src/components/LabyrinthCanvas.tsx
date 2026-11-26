@@ -1043,7 +1043,7 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
                   } else {
                     ball.state = 'falling_trap';
                     soundEngine.playTrapBell();
-                    propsRef.current.onTrapFall(ball.label, `${node.id} ${node.name}`);
+                    propsRef.current.onTrapFall(ball.label, node.name);
                   }
                   break;
                 } else if (dist > 0.001) {

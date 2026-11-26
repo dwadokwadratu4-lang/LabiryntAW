@@ -12,46 +12,15 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        manifest: false,
         includeAssets: [
+          'manifest.json',
           'icon.svg',
           'apple-touch-icon.png',
           'pwa-192x192.png',
           'pwa-512x512.png',
           'pwa-maskable-512x512.png',
         ],
-        manifest: {
-          id: '/',
-          name: 'Labirynt Powiatu Raciborskiego 3D',
-          short_name: 'Racibórz 3D',
-          description:
-            'Trójwymiarowa gra zręcznościowa WebGL / Three.js na planszy Powiatu Raciborskiego. Autor: Artur Wierzbicki.',
-          theme_color: '#1b110a',
-          background_color: '#120b06',
-          display: 'standalone',
-          orientation: 'any',
-          start_url: '/',
-          scope: '/',
-          icons: [
-            {
-              src: '/pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-maskable-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
-          ],
-        },
         workbox: {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],

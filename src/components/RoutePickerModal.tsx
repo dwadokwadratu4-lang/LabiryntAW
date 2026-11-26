@@ -70,7 +70,7 @@ export const RoutePickerModal: React.FC<RoutePickerModalProps> = ({
             >
               {TOWN_NODES.map((n) => (
                 <option key={n.id} value={n.id}>
-                  {n.id}. {n.name}
+                  {n.name}
                 </option>
               ))}
             </select>
@@ -91,7 +91,7 @@ export const RoutePickerModal: React.FC<RoutePickerModalProps> = ({
             >
               {TOWN_NODES.map((n) => (
                 <option key={n.id} value={n.id}>
-                  {n.id}. {n.name}
+                  {n.name}
                 </option>
               ))}
             </select>

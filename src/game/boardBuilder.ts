@@ -384,26 +384,16 @@ function createPlaqueTexture(
   ctx.strokeRect(7, 7, 498, 114);
 
   if (id !== null) {
-    ctx.beginPath();
-    ctx.arc(52, 64, 34, 0, Math.PI * 2);
-    ctx.fillStyle = variant === 'exit' ? '#95be7f' : '#f2be42';
-    ctx.fill();
-
-    ctx.fillStyle = '#0c0704';
-    ctx.font = '800 42px "Outfit", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(id), 52, 66);
-
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
     ctx.shadowBlur = 4;
     ctx.shadowOffsetY = 2;
-    ctx.fillStyle = '#fff9e6';
-    ctx.textAlign = 'left';
-    const fontSize = name.length > 15 ? 43 : name.length > 11 ? 49 : 55;
+    ctx.fillStyle = variant === 'exit' ? '#dcfce7' : '#fff9e6';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const fontSize = name.length > 16 ? 44 : name.length > 11 ? 52 : 58;
     ctx.font = `700 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
-    ctx.fillText(name, 98, 66, 398);
+    ctx.fillText(name, 256, 66, 466);
     ctx.restore();
   } else {
     ctx.save();
@@ -445,10 +435,10 @@ function createTitlePlaqueTexture(maxAniso: number): THREE.CanvasTexture {
   ctx.strokeRect(20, 20, 984, 120);
 
   ctx.fillStyle = '#f8df92';
-  ctx.font = '700 48px "Outfit", sans-serif';
+  ctx.font = '700 50px "Outfit", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('LABIRYNT POWIATU RACIBORSKIEGO', 512, 82);
+  ctx.fillText('ZŁOTE KULE POWIATU', 512, 82);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;

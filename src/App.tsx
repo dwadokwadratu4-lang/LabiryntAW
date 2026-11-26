@@ -396,9 +396,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [introActive, handleSkipIntro]);
 
-  const startNode = NODE_MAP.get(singleRoute.startId);
-  const targetNode = NODE_MAP.get(singleRoute.targetId);
-
   const setVirtualAxis = (pitch: number, roll: number) => {
     soundEngine.unlock();
     setVirtualTilt({ pitch, roll });
@@ -432,7 +429,7 @@ export default function App() {
         <div className="fixed inset-0 z-30 flex flex-col items-center justify-between py-8 px-4 pointer-events-none bg-gradient-to-b from-black/55 via-transparent to-black/65">
           <div className="mt-4 sm:mt-8 max-w-2xl w-full rounded-2xl bg-[#160d07]/88 border border-amber-400/45 px-6 py-5 text-center shadow-2xl pointer-events-auto">
             <h1 className="font-display text-2xl sm:text-4xl font-extrabold tracking-wide text-amber-300 drop-shadow">
-              LABIRYNT POWIATU RACIBORSKIEGO 3D
+              ZŁOTE KULE POWIATU
             </h1>
             <p className="mt-2 text-xs sm:text-sm font-medium text-amber-100/85 tracking-wider">
               Koncepcja i realizacja: Artur Wierzbicki
@@ -458,69 +455,53 @@ export default function App() {
           {/* Row 1: Main Title (full width, single line, clamp sized) */}
           <div
             className="w-full font-display font-extrabold tracking-wide text-amber-300 leading-tight whitespace-nowrap"
-            style={{ fontSize: 'clamp(13px, 3.8vw, 18px)' }}
+            style={{ fontSize: 'clamp(14px, 4.2vw, 19px)' }}
           >
-            LABIRYNT POWIATU RACIBORSKIEGO 3D
+            ZŁOTE KULE POWIATU
           </div>
 
-          {/* Row 2: Author attribution (exactly 50% smaller than main title) */}
+          {/* Row 2: Author attribution (50% smaller than main title) */}
           <div
             className="w-full font-medium text-amber-200/85 leading-tight"
-            style={{ fontSize: 'clamp(6.5px, 1.9vw, 9px)' }}
+            style={{ fontSize: 'clamp(7px, 2.1vw, 9.5px)' }}
           >
             Koncepcja i realizacja: Artur Wierzbicki
           </div>
 
-          {/* Row 3: Full route task (100% visible without ellipsis/truncation) */}
-          <div className="w-full">
-            {mode === 'single' ? (
-              <p
-                className="font-display font-semibold text-stone-100 leading-snug break-words"
-                style={{ fontSize: 'clamp(11px, 3.2vw, 14.5px)', textOverflow: 'clip' }}
-              >
-                Zadanie: Z{' '}
-                <span className="text-amber-400">
-                  {startNode?.id} {startNode?.shortName}
-                </span>{' '}
-                do{' '}
-                <span className="text-emerald-400">
-                  {targetNode?.id} {targetNode?.shortName}
-                </span>
-              </p>
-            ) : (
-              <div
-                className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-medium leading-snug"
-                style={{ fontSize: 'clamp(10px, 2.8vw, 13px)' }}
-              >
-                {courierMissions.map((m, idx) => {
-                  const tNode = NODE_MAP.get(m.targetId);
-                  const done = deliveredKeys.has(m.key);
-                  return (
-                    <React.Fragment key={m.key}>
-                      {idx > 0 && (
-                        <span aria-hidden="true" className="text-stone-600">
-                          ·
-                        </span>
-                      )}
-                      <span
-                        className={`inline-flex items-center gap-1 ${
-                          done ? 'line-through text-stone-500' : 'text-stone-100'
-                        }`}
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: m.uiColor }}
-                        />
-                        <span>
-                          {m.label} → {tNode?.id} {tNode?.shortName}
-                        </span>
+          {/* Row 3 (courier3 mode only): Compact colored target badges without numbers */}
+          {mode === 'courier3' && (
+            <div
+              className="w-full flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-medium leading-snug"
+              style={{ fontSize: 'clamp(10px, 2.8vw, 13px)' }}
+            >
+              {courierMissions.map((m, idx) => {
+                const tNode = NODE_MAP.get(m.targetId);
+                const done = deliveredKeys.has(m.key);
+                return (
+                  <React.Fragment key={m.key}>
+                    {idx > 0 && (
+                      <span aria-hidden="true" className="text-stone-600">
+                        ·
                       </span>
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    )}
+                    <span
+                      className={`inline-flex items-center gap-1 ${
+                        done ? 'line-through text-stone-500' : 'text-stone-100'
+                      }`}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: m.uiColor }}
+                      />
+                      <span>
+                        {m.label} → {tNode?.shortName}
+                      </span>
+                    </span>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          )}
 
           {/* Row 4: Metrics & Camera/Audio Controls */}
           <div className="w-full flex items-center justify-between gap-2 pt-1 border-t border-amber-500/15">
@@ -596,10 +577,13 @@ export default function App() {
                 </div>
               )}
             </div>
+            <p className="mt-4 font-display text-lg font-bold text-amber-300">
+              Bawimy się dalej kulami ?
+            </p>
             <button
               type="button"
               onClick={drawNextRoute}
-              className="mt-5 w-full min-h-[46px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-semibold text-sm transition-colors cursor-pointer"
+              className="mt-3 w-full min-h-[46px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-semibold text-sm transition-colors cursor-pointer"
             >
               Następna trasa (losuj)
             </button>
@@ -620,7 +604,10 @@ export default function App() {
             <p className="mt-2 text-sm text-stone-300">
               Spróbuj jeszcze raz tej samej trasy lub wylosuj nowe wyzwanie w Powiecie Raciborskim.
             </p>
-            <div className="mt-5 flex items-center gap-3">
+            <p className="mt-4 font-display text-lg font-bold text-amber-300">
+              Bawimy się dalej kulami ?
+            </p>
+            <div className="mt-3 flex items-center gap-3">
               <button
                 type="button"
                 onClick={resetCurrentRun}
