@@ -8,6 +8,8 @@ class SoundEngine {
   private lastChimeTime = 0;
   private lastGeeseTime = 0;
   private lastParamotorTime = 0;
+  private lastSirenTime = 0;
+  private lastBeepTime = 0;
 
   private ensureContext(): AudioContext | null {
     if (this.muted || typeof window === 'undefined') return null;
@@ -304,6 +306,75 @@ class SoundEngine {
     lfo.start(t);
     osc.stop(t + dur + 0.05);
     lfo.stop(t + dur + 0.05);
+  }
+
+  public playFireSiren(): void {
+    const ctx = this.ensureContext();
+    this.vibrate([30, 40, 30]);
+    if (!ctx) return;
+
+    const nowMs = performance.now();
+    if (nowMs - this.lastSirenTime < 2200) return;
+    this.lastSirenTime = nowMs;
+
+    const t = ctx.currentTime;
+    // Classic European two-tone emergency siren (hi-lo-hi-lo)
+    const tones = [660, 494, 660, 494];
+    const step = 0.32;
+
+    tones.forEach((freq, idx) => {
+      const start = t + idx * step;
+      const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, start);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1450, start);
+
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(0.065, start + 0.03);
+      gain.gain.setValueAtTime(0.06, start + step - 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + step);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + step + 0.02);
+    });
+  }
+
+  public playRoadworkBeep(): void {
+    const ctx = this.ensureContext();
+    this.vibrate(25);
+    if (!ctx) return;
+
+    const nowMs = performance.now();
+    if (nowMs - this.lastBeepTime < 1500) return;
+    this.lastBeepTime = nowMs;
+
+    const t = ctx.currentTime;
+    [0, 0.22].forEach((offset) => {
+      const start = t + offset;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1180, start);
+
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(0.055, start + 0.01);
+      gain.gain.setValueAtTime(0.05, start + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.13);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.15);
+    });
   }
 
   public playTrapBell(): void {

@@ -506,6 +506,7 @@ for (const s of ROAD_SEGMENTS) {
 
 interface CarEntity {
   group: THREE.Group;
+  kind: 'car' | 'bus';
   fromKey: string;
   toKey: string;
   t: number;
@@ -515,6 +516,7 @@ interface CarEntity {
   pauseTimer: number;
   hornCooldown: number;
   blockedTimer: number;
+  reverseGraceTimer: number;
 }
 
 function createCarGroup(
@@ -645,6 +647,7 @@ interface TirEntity {
   respawnTimer: number;
   hornCooldown: number;
   blockedTimer: number;
+  reverseGraceTimer: number;
 }
 
 function createTirGroup(
@@ -1004,6 +1007,208 @@ function createParamotorGroup(disposables: Array<{ dispose: () => void }>): {
   return { group: g, propeller };
 }
 
+function createPksBusGroup(
+  index: number,
+  disposables: Array<{ dispose: () => void }>
+): THREE.Group {
+  const g = new THREE.Group();
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.35 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+  disposables.push(whiteMat, stripeMat, glassMat, tireMat, headMat);
+
+  // Longer white coach body
+  const bodyGeo = new THREE.BoxGeometry(0.34, 0.24, 0.94);
+  const body = new THREE.Mesh(bodyGeo, whiteMat);
+  body.position.y = 0.19;
+  body.castShadow = true;
+
+  // Classic PKS blue horizontal stripe along both sides & front
+  const stripeGeo = new THREE.BoxGeometry(0.352, 0.06, 0.948);
+  const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+  stripe.position.y = 0.15;
+
+  // Panoramic dark windows band
+  const winGeo = new THREE.BoxGeometry(0.348, 0.085, 0.84);
+  const win = new THREE.Mesh(winGeo, glassMat);
+  win.position.set(0, 0.24, 0.02);
+
+  // Roof AC unit
+  const acGeo = new THREE.BoxGeometry(0.2, 0.04, 0.34);
+  const ac = new THREE.Mesh(acGeo, whiteMat);
+  ac.position.set(0, 0.33, -0.08);
+
+  const lightGeo = new THREE.BoxGeometry(0.07, 0.04, 0.03);
+  const hl1 = new THREE.Mesh(lightGeo, headMat);
+  hl1.position.set(-0.1, 0.1, 0.475);
+  const hl2 = new THREE.Mesh(lightGeo, headMat);
+  hl2.position.set(0.1, 0.1, 0.475);
+
+  const wheelGeo = new THREE.CylinderGeometry(0.068, 0.068, 0.05, 10);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wCoords: [number, number][] = [
+    [-0.17, 0.28],
+    [0.17, 0.28],
+    [-0.17, -0.28],
+    [0.17, -0.28],
+  ];
+  for (const [wx, wz] of wCoords) {
+    const w = new THREE.Mesh(wheelGeo, tireMat);
+    w.position.set(wx, 0.068, wz);
+    g.add(w);
+  }
+
+  const hitGeo = new THREE.SphereGeometry(0.56, 8, 8);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+  hitMesh.position.y = 0.22;
+  hitMesh.userData.interactable = { type: 'car', index } as InteractableHit;
+
+  g.add(body, stripe, win, ac, hl1, hl2, hitMesh);
+  disposables.push(bodyGeo, stripeGeo, winGeo, acGeo, lightGeo, wheelGeo, hitGeo, hitMat);
+  return g;
+}
+
+function createFireTruckGroup(
+  index: number,
+  disposables: Array<{ dispose: () => void }>
+): {
+  group: THREE.Group;
+  beaconLMat: THREE.MeshBasicMaterial;
+  beaconRMat: THREE.MeshBasicMaterial;
+  sirenLight: THREE.PointLight;
+} {
+  const g = new THREE.Group();
+  const redMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.28, metalness: 0.25 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
+  const silverMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.65, roughness: 0.3 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
+  const beaconLMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
+  const beaconRMat = new THREE.MeshBasicMaterial({ color: 0x1e3a8a });
+  disposables.push(redMat, whiteMat, silverMat, glassMat, tireMat, beaconLMat, beaconRMat);
+
+  const chassisGeo = new THREE.BoxGeometry(0.35, 0.25, 0.84);
+  const chassis = new THREE.Mesh(chassisGeo, redMat);
+  chassis.position.y = 0.195;
+  chassis.castShadow = true;
+
+  const stripeGeo = new THREE.BoxGeometry(0.36, 0.045, 0.85);
+  const stripe = new THREE.Mesh(stripeGeo, whiteMat);
+  stripe.position.y = 0.13;
+
+  const shutterGeo = new THREE.BoxGeometry(0.362, 0.11, 0.42);
+  const shutter = new THREE.Mesh(shutterGeo, silverMat);
+  shutter.position.set(0, 0.22, -0.14);
+
+  const windGeo = new THREE.BoxGeometry(0.31, 0.1, 0.04);
+  const wind = new THREE.Mesh(windGeo, glassMat);
+  wind.position.set(0, 0.25, 0.415);
+
+  const ladderGeo = new THREE.BoxGeometry(0.14, 0.04, 0.56);
+  const ladder = new THREE.Mesh(ladderGeo, silverMat);
+  ladder.position.set(0, 0.34, -0.1);
+
+  const bGeo = new THREE.CylinderGeometry(0.038, 0.042, 0.06, 8);
+  const bL = new THREE.Mesh(bGeo, beaconLMat);
+  bL.position.set(-0.1, 0.35, 0.28);
+  const bR = new THREE.Mesh(bGeo, beaconRMat);
+  bR.position.set(0.1, 0.35, 0.28);
+
+  const sirenLight = new THREE.PointLight(0x3b82f6, 2.5, 4.5);
+  sirenLight.position.set(0, 0.5, 0.28);
+
+  const wheelGeo = new THREE.CylinderGeometry(0.068, 0.068, 0.055, 10);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wCoords: [number, number][] = [
+    [-0.175, 0.26],
+    [0.175, 0.26],
+    [-0.175, -0.25],
+    [0.175, -0.25],
+  ];
+  for (const [wx, wz] of wCoords) {
+    const w = new THREE.Mesh(wheelGeo, tireMat);
+    w.position.set(wx, 0.068, wz);
+    g.add(w);
+  }
+
+  const hitGeo = new THREE.SphereGeometry(0.54, 8, 8);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+  hitMesh.position.y = 0.22;
+  hitMesh.userData.interactable = { type: 'car', index } as InteractableHit;
+
+  g.add(chassis, stripe, shutter, wind, ladder, bL, bR, sirenLight, hitMesh);
+  disposables.push(chassisGeo, stripeGeo, shutterGeo, windGeo, ladderGeo, bGeo, wheelGeo, hitGeo, hitMat);
+  return { group: g, beaconLMat, beaconRMat, sirenLight };
+}
+
+function createExcavatorGroup(disposables: Array<{ dispose: () => void }>): {
+  group: THREE.Group;
+  beaconMat: THREE.MeshBasicMaterial;
+  beaconLight: THREE.PointLight;
+} {
+  const g = new THREE.Group();
+  const yellowMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.38, metalness: 0.2 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15 });
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+  disposables.push(yellowMat, darkMat, glassMat, beaconMat);
+
+  // Heavy crawler tracks
+  const trackGeo = new THREE.BoxGeometry(0.14, 0.12, 0.66);
+  const tL = new THREE.Mesh(trackGeo, darkMat);
+  tL.position.set(-0.2, 0.06, 0);
+  tL.castShadow = true;
+  const tR = new THREE.Mesh(trackGeo, darkMat);
+  tR.position.set(0.2, 0.06, 0);
+  tR.castShadow = true;
+
+  // Rotating superstructure + counterweight
+  const bodyGeo = new THREE.BoxGeometry(0.42, 0.22, 0.44);
+  const body = new THREE.Mesh(bodyGeo, yellowMat);
+  body.position.set(0, 0.23, -0.05);
+  body.castShadow = true;
+
+  // Cab
+  const cabGeo = new THREE.BoxGeometry(0.24, 0.24, 0.26);
+  const cab = new THREE.Mesh(cabGeo, glassMat);
+  cab.position.set(-0.08, 0.44, 0.02);
+  cab.castShadow = true;
+
+  // Articulated excavator boom + stick + bucket
+  const boomGeo = new THREE.BoxGeometry(0.1, 0.1, 0.56);
+  const boom = new THREE.Mesh(boomGeo, yellowMat);
+  boom.position.set(0.12, 0.45, 0.28);
+  boom.rotation.x = -0.55;
+  boom.castShadow = true;
+
+  const stickGeo = new THREE.BoxGeometry(0.085, 0.085, 0.44);
+  const stick = new THREE.Mesh(stickGeo, yellowMat);
+  stick.position.set(0.12, 0.38, 0.6);
+  stick.rotation.x = 0.85;
+  stick.castShadow = true;
+
+  const bucketGeo = new THREE.BoxGeometry(0.22, 0.14, 0.18);
+  const bucket = new THREE.Mesh(bucketGeo, darkMat);
+  bucket.position.set(0.12, 0.18, 0.72);
+  bucket.castShadow = true;
+
+  // Orange warning beacon on roof
+  const bGeo = new THREE.CylinderGeometry(0.045, 0.05, 0.07, 8);
+  const beacon = new THREE.Mesh(bGeo, beaconMat);
+  beacon.position.set(-0.08, 0.59, 0.02);
+
+  const beaconLight = new THREE.PointLight(0xf97316, 2.2, 3.8);
+  beaconLight.position.set(-0.08, 0.68, 0.02);
+
+  g.add(tL, tR, body, cab, boom, stick, bucket, beacon, beaconLight);
+  disposables.push(trackGeo, bodyGeo, cabGeo, boomGeo, stickGeo, bucketGeo, bGeo);
+  return { group: g, beaconMat, beaconLight };
+}
+
 export function buildLivingWorld(): LivingWorldController {
   const group = new THREE.Group();
   const disposables: Array<{ dispose: () => void }> = [];
@@ -1033,28 +1238,34 @@ export function buildLivingWorld(): LivingWorldController {
     };
   });
 
-  // 3. 2 Small Colorful Cars driving along road grooves + 2s anti-deadlock reversal
+  // 3. Road Vehicles: 2 Colorful Cars + White PKS Bus (all share 2s 180-deg anti-deadlock reversal)
   const carConfigs = [
-    { color: 0xdc2626, start: 'n3', next: 'n1' },
-    { color: 0x2563eb, start: 'n11', next: 'n12' },
+    { color: 0xdc2626, start: 'n3', next: 'n1', kind: 'car' as const },
+    { color: 0x2563eb, start: 'n11', next: 'n12', kind: 'car' as const },
+    { color: 0xf8fafc, start: 'n9', next: 'n10', kind: 'bus' as const },
   ];
   const cars: CarEntity[] = carConfigs.map((cfg, idx) => {
-    const cg = createCarGroup(idx, cfg.color, disposables);
+    const cg =
+      cfg.kind === 'bus'
+        ? createPksBusGroup(idx, disposables)
+        : createCarGroup(idx, cfg.color, disposables);
     const [sx, sz] = CAR_GRAPH_POINTS[cfg.start];
     cg.position.set(sx, 0.0, sz);
     group.add(cg);
     interactables.push(cg);
     return {
       group: cg,
+      kind: cfg.kind,
       fromKey: cfg.start,
       toKey: cfg.next,
-      t: 0.2 + idx * 0.35,
-      speed: 1.55 + idx * 0.18,
+      t: 0.2 + idx * 0.25,
+      speed: cfg.kind === 'bus' ? 1.48 : 1.55 + idx * 0.18,
       x: sx,
       z: sz,
       pauseTimer: 0,
       hornCooldown: 0,
       blockedTimer: 0,
+      reverseGraceTimer: 0,
     };
   });
 
@@ -1078,7 +1289,34 @@ export function buildLivingWorld(): LivingWorldController {
     respawnTimer: 0,
     hornCooldown: 0,
     blockedTimer: 0,
+    reverseGraceTimer: 0,
   };
+
+  // 4b. Rare Fire Truck (Straż Pożarna na sygnale raz na 45-60s)
+  const fireTruckVisual = createFireTruckGroup(100, disposables);
+  fireTruckVisual.group.visible = false;
+  group.add(fireTruckVisual.group);
+  interactables.push(fireTruckVisual.group);
+
+  let fireActive = false;
+  let fireCooldown = 22.0; // first callout ~22s in, then 45-60s
+  let fireFrom = 'n9';
+  let fireTo = 'n4';
+  let fireT = 0;
+  let fireX = 0;
+  let fireZ = 0;
+  let fireHopsLeft = 0;
+  let fireSirenTimer = 0;
+
+  // 4c. Random 3-second Roadworks Yellow Excavator
+  const excavator = createExcavatorGroup(disposables);
+  excavator.group.visible = false;
+  group.add(excavator.group);
+  let roadworkActive = false;
+  let roadworkTimer = 0;
+  let roadworkCooldown = 8.0; // first roadworks appear ~8s after start, then 14-19s
+  let roadworkX = 0;
+  let roadworkZ = 0;
 
   // 5. Deer & White Sheep roaming meadows & forest edges
   const animalSeeds: Array<{ kind: 'deer' | 'sheep'; hx: number; hz: number }> = [
@@ -1169,6 +1407,8 @@ export function buildLivingWorld(): LivingWorldController {
       if (hit.index === 99) {
         soundEngine.playCarHorn();
         tir.hornCooldown = 1.0;
+      } else if (hit.index === 100) {
+        soundEngine.playFireSiren();
       } else {
         const c = cars[hit.index];
         if (c) {
@@ -1238,12 +1478,83 @@ export function buildLivingWorld(): LivingWorldController {
       }
     }
 
-    // 2. Update Cars + Anti-deadlock 2s 180-degree reversal
+    // 1b. Update 3-second Random Roadworks Excavator (blocks balls & vehicles!)
+    if (!roadworkActive) {
+      roadworkCooldown -= dt;
+      if (roadworkCooldown <= 0) {
+        // Pick a road segment midpoint not directly under an active marble
+        let chosen = ROAD_SEGMENTS[Math.floor(Math.random() * ROAD_SEGMENTS.length)];
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const cand = ROAD_SEGMENTS[Math.floor(Math.random() * ROAD_SEGMENTS.length)];
+          const mx = (cand.ax + cand.bx) * 0.5;
+          const mz = (cand.az + cand.bz) * 0.5;
+          const tooClose = balls.some(
+            (b) => b.state === 'active' && Math.hypot(b.x - mx, b.z - mz) < 1.15
+          );
+          if (!tooClose) {
+            chosen = cand;
+            break;
+          }
+        }
+        roadworkX = (chosen.ax + chosen.bx) * 0.5;
+        roadworkZ = (chosen.az + chosen.bz) * 0.5;
+        excavator.group.position.set(roadworkX, 0.0, roadworkZ);
+        excavator.group.rotation.y = Math.atan2(chosen.bx - chosen.ax, chosen.bz - chosen.az);
+        excavator.group.visible = true;
+        roadworkActive = true;
+        roadworkTimer = 3.0; // exactly 3 seconds
+        soundEngine.playRoadworkBeep();
+      }
+    } else {
+      roadworkTimer -= dt;
+      const blink = Math.floor(elapsed * 8) % 2 === 0;
+      excavator.beaconMat.color.setHex(blink ? 0xf97316 : 0x7c2d12);
+      excavator.beaconLight.intensity = blink ? 2.8 : 0.3;
+
+      // Physically block marbles from passing the excavator
+      const minExcSep = BALL_RADIUS + 0.44;
+      for (const ball of balls) {
+        if (ball.state !== 'active') continue;
+        const dx = ball.x - roadworkX;
+        const dz = ball.z - roadworkZ;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0.001 && dist < minExcSep) {
+          const nx = dx / dist;
+          const nz = dz / dist;
+          ball.x += nx * (minExcSep - dist);
+          ball.z += nz * (minExcSep - dist);
+          const vn = ball.vx * nx + ball.vz * nz;
+          if (vn < 0) {
+            ball.vx -= 1.35 * vn * nx;
+            ball.vz -= 1.35 * vn * nz;
+            if (Math.abs(vn) > 0.8) soundEngine.playWoodKnock(Math.abs(vn));
+          }
+        }
+      }
+
+      if (roadworkTimer <= 0) {
+        roadworkActive = false;
+        excavator.group.visible = false;
+        roadworkCooldown = 14.0 + Math.random() * 5.0;
+      }
+    }
+
+    // 2. Update Cars & White PKS Bus + Roadwork stop + Universal 2s 180-degree reversal
     for (const c of cars) {
       if (c.hornCooldown > 0) c.hornCooldown -= dt;
-      if (c.pauseTimer > 0) {
+      if (c.reverseGraceTimer > 0) c.reverseGraceTimer = Math.max(0, c.reverseGraceTimer - dt);
+
+      const prevX = c.x;
+      const prevZ = c.z;
+      const blockedByExcavator =
+        roadworkActive &&
+        c.reverseGraceTimer <= 0 &&
+        Math.hypot(c.x - roadworkX, c.z - roadworkZ) < 0.98;
+
+      if (c.pauseTimer > 0 && c.reverseGraceTimer <= 0) {
         c.pauseTimer -= dt;
-      } else {
+      } else if (!blockedByExcavator) {
+        c.pauseTimer = 0;
         const pa = CAR_GRAPH_POINTS[c.fromKey];
         const pb = CAR_GRAPH_POINTS[c.toKey];
         const segLen = Math.max(0.1, Math.hypot(pb[0] - pa[0], pb[1] - pa[1]));
@@ -1276,35 +1587,53 @@ export function buildLivingWorld(): LivingWorldController {
         c.group.rotation.y = Math.atan2(dx, dz);
       }
 
-      let isBlockedByBall = false;
+      const fwdX = Math.sin(c.group.rotation.y);
+      const fwdZ = Math.cos(c.group.rotation.y);
+      const hullOffsets = c.kind === 'bus' ? [-0.32, 0, 0.32] : [-0.14, 0.14];
+      const movedDist = Math.hypot(c.x - prevX, c.z - prevZ);
+      let isBlocked = blockedByExcavator || movedDist < c.speed * dt * 0.15;
+
       for (const ball of balls) {
         if (ball.state !== 'active') continue;
-        const dx = ball.x - c.x;
-        const dz = ball.z - c.z;
-        const dist = Math.hypot(dx, dz);
 
-        if (dist < 1.38 && c.hornCooldown <= 0) {
+        let closestDist = 999;
+        let closestNx = 0;
+        let closestNz = 0;
+        for (const off of hullOffsets) {
+          const hx = c.x + fwdX * off;
+          const hz = c.z + fwdZ * off;
+          const dx = ball.x - hx;
+          const dz = ball.z - hz;
+          const d = Math.hypot(dx, dz);
+          if (d < closestDist) {
+            closestDist = d;
+            closestNx = d > 0.001 ? dx / d : fwdZ;
+            closestNz = d > 0.001 ? dz / d : -fwdX;
+          }
+        }
+
+        if (closestDist < 1.38 && c.hornCooldown <= 0) {
           soundEngine.playCarHorn();
           c.hornCooldown = 1.6;
         }
 
-        const minSep = BALL_RADIUS + 0.3;
-        if (dist < minSep + 0.16) {
-          isBlockedByBall = true;
+        const minSep = BALL_RADIUS + (c.kind === 'bus' ? 0.26 : 0.28);
+        if (closestDist < minSep + 0.18) {
+          isBlocked = true;
         }
 
-        if (dist > 0.001 && dist < minSep) {
-          const nx = dx / dist;
-          const nz = dz / dist;
-          ball.x += nx * (minSep - dist);
-          ball.z += nz * (minSep - dist);
+        if (closestDist > 0.001 && closestDist < minSep) {
+          ball.x += closestNx * (minSep - closestDist);
+          ball.z += closestNz * (minSep - closestDist);
 
-          const vn = ball.vx * nx + ball.vz * nz;
+          const vn = ball.vx * closestNx + ball.vz * closestNz;
           if (vn < 1.5) {
-            ball.vx += nx * (Math.abs(vn) * 1.4 + 4.8);
-            ball.vz += nz * (Math.abs(vn) * 1.4 + 4.8);
+            ball.vx += closestNx * (Math.abs(vn) * 1.4 + 4.8);
+            ball.vz += closestNz * (Math.abs(vn) * 1.4 + 4.8);
           }
-          c.pauseTimer = 0.22;
+          if (c.reverseGraceTimer <= 0) {
+            c.pauseTimer = 0.22;
+          }
           if (c.hornCooldown <= 0) {
             soundEngine.playCarHorn();
             c.hornCooldown = 1.4;
@@ -1312,25 +1641,38 @@ export function buildLivingWorld(): LivingWorldController {
         }
       }
 
-      if (isBlockedByBall) {
+      if (isBlocked && c.reverseGraceTimer <= 0) {
         c.blockedTimer += dt;
         if (c.blockedTimer >= 2.0) {
-          // Immediately turn 180 degrees and drive back in the opposite direction
           const prevFrom = c.fromKey;
           c.fromKey = c.toKey;
           c.toKey = prevFrom;
-          c.t = Math.max(0.02, 1 - c.t);
+          c.t = Math.min(0.95, Math.max(0.04, 1 - c.t + 0.03));
           c.blockedTimer = 0;
           c.pauseTimer = 0;
+          c.reverseGraceTimer = 0.9;
+
+          // Immediately rotate 180 degrees & update lane offset on this frame
+          const p1 = CAR_GRAPH_POINTS[c.fromKey];
+          const p2 = CAR_GRAPH_POINTS[c.toKey];
+          const dx = p2[0] - p1[0];
+          const dz = p2[1] - p1[1];
+          const len = Math.hypot(dx, dz) || 1;
+          c.x = p1[0] + dx * c.t + (-dz / len) * 0.22;
+          c.z = p1[1] + dz * c.t + (dx / len) * 0.22;
+          c.group.position.set(c.x, 0.0, c.z);
+          c.group.rotation.y = Math.atan2(dx, dz);
           soundEngine.playCarHorn();
         }
-      } else {
+      } else if (!isBlocked) {
         c.blockedTimer = Math.max(0, c.blockedTimer - dt * 2);
       }
     }
 
-    // 3. Update Modzurów Blue TIR (window factory truck heading to PL/CZ border)
+    // 3. Update Modzurów Blue TIR (window factory truck + trailer) with 2s 180-degree reversal
     if (tir.hornCooldown > 0) tir.hornCooldown -= dt;
+    if (tir.reverseGraceTimer > 0) tir.reverseGraceTimer = Math.max(0, tir.reverseGraceTimer - dt);
+
     if (tir.respawnTimer > 0) {
       tir.respawnTimer -= dt;
       tir.group.visible = false;
@@ -1340,14 +1682,23 @@ export function buildLivingWorld(): LivingWorldController {
         tir.dir = 1;
         tir.t = 0;
         tir.blockedTimer = 0;
+        tir.reverseGraceTimer = 0;
         tir.group.visible = true;
       }
     } else {
       tir.group.visible = true;
       const route = TIR_ROUTES[tir.routeIdx];
-      if (tir.pauseTimer > 0) {
+      const prevTirX = tir.x;
+      const prevTirZ = tir.z;
+      const tirRoadworkBlock =
+        roadworkActive &&
+        tir.reverseGraceTimer <= 0 &&
+        Math.hypot(tir.x - roadworkX, tir.z - roadworkZ) < 1.08;
+
+      if (tir.pauseTimer > 0 && tir.reverseGraceTimer <= 0) {
         tir.pauseTimer -= dt;
-      } else {
+      } else if (!tirRoadworkBlock) {
+        tir.pauseTimer = 0;
         const fromKey = route[tir.segIdx];
         const toIdx = tir.segIdx + tir.dir;
         if (toIdx < 0 || toIdx >= route.length) {
@@ -1389,49 +1740,178 @@ export function buildLivingWorld(): LivingWorldController {
         }
       }
 
-      let tirBlocked = false;
-      for (const ball of balls) {
-        if (ball.state !== 'active') continue;
-        const dx = ball.x - tir.x;
-        const dz = ball.z - tir.z;
-        const dist = Math.hypot(dx, dz);
+      if (tir.respawnTimer <= 0) {
+        const tirFwdX = Math.sin(tir.group.rotation.y);
+        const tirFwdZ = Math.cos(tir.group.rotation.y);
+        // Check cab (+0.40), mid-trailer (0.0), and rear trailer (-0.42) so any collision triggers reversal
+        const tirHullOffsets = [-0.42, 0.0, 0.4];
+        const tirMoved = Math.hypot(tir.x - prevTirX, tir.z - prevTirZ);
+        let tirBlocked = tirRoadworkBlock || tirMoved < tir.speed * dt * 0.15;
 
-        if (dist < 1.55 && tir.hornCooldown <= 0) {
-          soundEngine.playCarHorn();
-          tir.hornCooldown = 1.8;
-        }
+        for (const ball of balls) {
+          if (ball.state !== 'active') continue;
 
-        const minSep = BALL_RADIUS + 0.36;
-        if (dist < minSep + 0.18) {
-          tirBlocked = true;
-        }
-        if (dist > 0.001 && dist < minSep) {
-          const nx = dx / dist;
-          const nz = dz / dist;
-          ball.x += nx * (minSep - dist);
-          ball.z += nz * (minSep - dist);
-          const vn = ball.vx * nx + ball.vz * nz;
-          if (vn < 1.5) {
-            ball.vx += nx * (Math.abs(vn) * 1.4 + 4.8);
-            ball.vz += nz * (Math.abs(vn) * 1.4 + 4.8);
+          let closestDist = 999;
+          let closestNx = 0;
+          let closestNz = 0;
+          for (const off of tirHullOffsets) {
+            const hx = tir.x + tirFwdX * off;
+            const hz = tir.z + tirFwdZ * off;
+            const dx = ball.x - hx;
+            const dz = ball.z - hz;
+            const d = Math.hypot(dx, dz);
+            if (d < closestDist) {
+              closestDist = d;
+              closestNx = d > 0.001 ? dx / d : tirFwdZ;
+              closestNz = d > 0.001 ? dz / d : -tirFwdX;
+            }
           }
-          tir.pauseTimer = 0.24;
+
+          if (closestDist < 1.55 && tir.hornCooldown <= 0) {
+            soundEngine.playCarHorn();
+            tir.hornCooldown = 1.8;
+          }
+
+          const minSep = BALL_RADIUS + 0.26;
+          if (closestDist < minSep + 0.18) {
+            tirBlocked = true;
+          }
+          if (closestDist > 0.001 && closestDist < minSep) {
+            ball.x += closestNx * (minSep - closestDist);
+            ball.z += closestNz * (minSep - closestDist);
+            const vn = ball.vx * closestNx + ball.vz * closestNz;
+            if (vn < 1.5) {
+              ball.vx += closestNx * (Math.abs(vn) * 1.4 + 4.8);
+              ball.vz += closestNz * (Math.abs(vn) * 1.4 + 4.8);
+            }
+            if (tir.reverseGraceTimer <= 0) {
+              tir.pauseTimer = 0.24;
+            }
+          }
+        }
+
+        if (tirBlocked && tir.reverseGraceTimer <= 0) {
+          tir.blockedTimer += dt;
+          if (tir.blockedTimer >= 2.0) {
+            const nextSegIdx = tir.segIdx + tir.dir;
+            if (nextSegIdx >= 0 && nextSegIdx < route.length) {
+              tir.segIdx = nextSegIdx;
+              tir.dir = tir.dir === 1 ? -1 : 1;
+              tir.t = Math.min(0.95, Math.max(0.04, 1 - tir.t + 0.03));
+            } else {
+              tir.dir = tir.dir === 1 ? -1 : 1;
+              tir.t = 0.05;
+            }
+            tir.blockedTimer = 0;
+            tir.pauseTimer = 0;
+            tir.reverseGraceTimer = 0.95;
+
+            // Immediately rotate tractor + trailer 180 degrees on this exact frame
+            const nextCheck = tir.segIdx + tir.dir;
+            if (nextCheck >= 0 && nextCheck < route.length) {
+              const a = CAR_GRAPH_POINTS[route[tir.segIdx]];
+              const b = CAR_GRAPH_POINTS[route[nextCheck]];
+              const sdx = b[0] - a[0];
+              const sdz = b[1] - a[1];
+              const slen = Math.hypot(sdx, sdz) || 1;
+              tir.x = a[0] + sdx * tir.t + (-sdz / slen) * 0.2;
+              tir.z = a[1] + sdz * tir.t + (sdx / slen) * 0.2;
+              tir.group.position.set(tir.x, 0.0, tir.z);
+              tir.group.rotation.y = Math.atan2(sdx, sdz);
+            }
+            soundEngine.playCarHorn();
+          }
+        } else if (!tirBlocked) {
+          tir.blockedTimer = Math.max(0, tir.blockedTimer - dt * 2);
+        }
+      }
+    }
+
+    // 3b. Rare Fire Truck (Straż Pożarna na sygnale raz na 45-60s — wyłączona z reguły zawracania 180°)
+    if (!fireActive) {
+      fireCooldown -= dt;
+      if (fireCooldown <= 0) {
+        fireActive = true;
+        fireFrom = 'n9';
+        const neighbors = CAR_ADJACENCY[fireFrom] ?? ['n4'];
+        fireTo = neighbors[Math.floor(Math.random() * neighbors.length)];
+        fireT = 0;
+        fireHopsLeft = 6;
+        fireSirenTimer = 0;
+        fireTruckVisual.group.visible = true;
+        soundEngine.playFireSiren();
+      }
+    } else {
+      const flashA = Math.floor(elapsed * 10) % 2 === 0;
+      fireTruckVisual.beaconLMat.color.setHex(flashA ? 0x60a5fa : 0x1e3a8a);
+      fireTruckVisual.beaconRMat.color.setHex(flashA ? 0x1e3a8a : 0x60a5fa);
+      fireTruckVisual.sirenLight.intensity = flashA ? 3.2 : 1.8;
+
+      fireSirenTimer += dt;
+      if (fireSirenTimer >= 2.5) {
+        fireSirenTimer = 0;
+        soundEngine.playFireSiren();
+      }
+
+      const fireRoadBlock =
+        roadworkActive && Math.hypot(fireX - roadworkX, fireZ - roadworkZ) < 1.0;
+
+      if (!fireRoadBlock) {
+        const pa = CAR_GRAPH_POINTS[fireFrom];
+        const pb = CAR_GRAPH_POINTS[fireTo];
+        const segLen = Math.max(0.1, Math.hypot(pb[0] - pa[0], pb[1] - pa[1]));
+        fireT += (2.65 * dt) / segLen;
+
+        if (fireT >= 1) {
+          fireHopsLeft -= 1;
+          if (fireHopsLeft <= 0) {
+            fireActive = false;
+            fireTruckVisual.group.visible = false;
+            fireCooldown = 45.0 + Math.random() * 15.0; // 45-60s rare cadence
+          } else {
+            const arrived = fireTo;
+            const neighbors = CAR_ADJACENCY[arrived] ?? [];
+            const choices = neighbors.filter((k) => k !== fireFrom);
+            const next =
+              choices.length > 0
+                ? choices[Math.floor(Math.random() * choices.length)]
+                : neighbors[0] ?? fireFrom;
+            fireFrom = arrived;
+            fireTo = next;
+            fireT = 0;
+          }
+        }
+
+        if (fireActive) {
+          const p1 = CAR_GRAPH_POINTS[fireFrom];
+          const p2 = CAR_GRAPH_POINTS[fireTo];
+          const dx = p2[0] - p1[0];
+          const dz = p2[1] - p1[1];
+          const len = Math.hypot(dx, dz) || 1;
+          fireX = p1[0] + dx * fireT + (-dz / len) * 0.16;
+          fireZ = p1[1] + dz * fireT + (dx / len) * 0.16;
+          fireTruckVisual.group.position.set(fireX, 0.0, fireZ);
+          fireTruckVisual.group.rotation.y = Math.atan2(dx, dz);
         }
       }
 
-      if (tirBlocked) {
-        tir.blockedTimer += dt;
-        if (tir.blockedTimer >= 2.0) {
-          // Immediately flip 180° along route
-          tir.segIdx = tir.segIdx + tir.dir;
-          tir.dir = tir.dir === 1 ? -1 : 1;
-          tir.t = Math.max(0.02, 1 - tir.t);
-          tir.blockedTimer = 0;
-          tir.pauseTimer = 0;
-          soundEngine.playCarHorn();
+      if (fireActive) {
+        for (const ball of balls) {
+          if (ball.state !== 'active') continue;
+          const dx = ball.x - fireX;
+          const dz = ball.z - fireZ;
+          const dist = Math.hypot(dx, dz);
+          const minSep = BALL_RADIUS + 0.38;
+          if (dist > 0.001 && dist < minSep) {
+            // Marble gently hops aside yielding right-of-way to the Fire Truck
+            const nx = dx / dist;
+            const nz = dz / dist;
+            ball.x += nx * (minSep - dist);
+            ball.z += nz * (minSep - dist);
+            ball.vx += nx * 5.8;
+            ball.vz += nz * 5.8;
+          }
         }
-      } else {
-        tir.blockedTimer = Math.max(0, tir.blockedTimer - dt * 2);
       }
     }
 

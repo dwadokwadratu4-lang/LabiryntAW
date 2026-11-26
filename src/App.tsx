@@ -1,10 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Compass,
   Crosshair,
   ChevronDown,
   ChevronUp,
   Eye,
+  Info,
   MapPin,
   RotateCcw,
   Shuffle,
@@ -16,11 +21,13 @@ import {
   ActiveBallMission,
   CameraViewMode,
   GameMode,
+  TargetInfoText,
 } from './components/LabyrinthCanvas';
 import { OfflineBanner, PWAInstallButton } from './components/PWAInstallButton';
 import { RoutePickerModal } from './components/RoutePickerModal';
 import {
   NODE_MAP,
+  TOWN_FACTS,
   pickRandomRoute,
   pickThreeCourierRoutes,
 } from './game/mapData';
@@ -63,11 +70,15 @@ export default function App() {
   const startTimeRef = useRef<number | null>(null);
 
   const [muted, setMuted] = useState(false);
-  const [cameraView, setCameraView] = useState<CameraViewMode>('angled');
+  const [cameraView, setCameraView] = useState<CameraViewMode>('follow');
   const [gyroEnabled, setGyroEnabled] = useState(true);
   const [calibrateSignal, setCalibrateSignal] = useState(0);
   const [centerLevelSignal, setCenterLevelSignal] = useState(0);
-  const [dockCollapsed, setDockCollapsed] = useState(false);
+  const [dockCollapsed, setDockCollapsed] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  );
+  const [infoCollapsed, setInfoCollapsed] = useState(false);
+  const [virtualTilt, setVirtualTilt] = useState({ pitch: 0, roll: 0 });
   const [showRouteModal, setShowRouteModal] = useState(false);
   const [introActive, setIntroActive] = useState(true);
 
@@ -94,6 +105,51 @@ export default function App() {
     }
     return courierMissions;
   }, [mode, singleRoute, courierMissions]);
+
+  const primaryTargetId = useMemo(() => {
+    if (mode === 'single') return singleRoute.targetId;
+    const nextUndelivered = courierMissions.find((m) => !deliveredKeys.has(m.key));
+    return nextUndelivered?.targetId ?? courierMissions[0]?.targetId ?? 9;
+  }, [mode, singleRoute.targetId, courierMissions, deliveredKeys]);
+
+  const targetFact = TOWN_FACTS[primaryTargetId] ?? TOWN_FACTS[9];
+
+  const [typedChars, setTypedChars] = useState(0);
+
+  useEffect(() => {
+    const totalLen =
+      targetFact.title.length +
+      targetFact.era.length +
+      targetFact.population.length +
+      targetFact.distanceToStarostwo.length;
+
+    setTypedChars(0);
+    if (introActive) return;
+
+    const timer = window.setInterval(() => {
+      setTypedChars((prev) => {
+        if (prev >= totalLen) {
+          window.clearInterval(timer);
+          return totalLen;
+        }
+        return Math.min(totalLen, prev + 2);
+      });
+    }, 22);
+
+    return () => window.clearInterval(timer);
+  }, [targetFact, runId, introActive]);
+
+  const typedInfo: TargetInfoText = useMemo(() => {
+    let rem = typedChars;
+    const t = targetFact.title.slice(0, rem);
+    rem = Math.max(0, rem - targetFact.title.length);
+    const e = targetFact.era.slice(0, rem);
+    rem = Math.max(0, rem - targetFact.era.length);
+    const p = targetFact.population.slice(0, rem);
+    rem = Math.max(0, rem - targetFact.population.length);
+    const d = targetFact.distanceToStarostwo.slice(0, rem);
+    return { title: t, era: e, population: p, distance: d };
+  }, [typedChars, targetFact]);
 
   // High-precision stopwatch loop
   useEffect(() => {
@@ -194,8 +250,7 @@ export default function App() {
     setRunId((r) => r + 1);
   };
 
-  const handleCalibrate = async () => {
-    soundEngine.unlock();
+  const unlockGyroOnGesture = useCallback(async (showFeedback: boolean) => {
     const DOE = window.DeviceOrientationEvent as unknown as {
       requestPermission?: () => Promise<'granted' | 'denied'>;
     };
@@ -205,26 +260,30 @@ export default function App() {
         if (res === 'granted') {
           setGyroEnabled(true);
           setCalibrateSignal((s) => s + 1);
-          showTempBanner('Żyroskop aktywny — poziom skalibrowany');
+          if (showFeedback) showTempBanner('Żyroskop aktywny — poziom skalibrowany');
         } else {
           setGyroEnabled(false);
-          showTempBanner('Brak dostępu do żyroskopu — użyj przeciągania lub klawiszy');
+          if (showFeedback) showTempBanner('Brak dostępu do żyroskopu — użyj strzałek lub przeciągania');
         }
         return;
       } catch {
-        showTempBanner('Użyj przeciągania palcem lub klawiszy WASD/strzałek');
+        if (showFeedback) showTempBanner('Użyj strzałek na ekranie, palca lub klawiszy WASD');
         return;
       }
     }
     setGyroEnabled(true);
     setCalibrateSignal((s) => s + 1);
-    showTempBanner('Poziom planszy skalibrowany');
+    if (showFeedback) showTempBanner('Poziom planszy skalibrowany');
+  }, [showTempBanner]);
+
+  const handleCalibrate = async () => {
+    soundEngine.unlock();
+    await unlockGyroOnGesture(true);
   };
 
   const handleCenterLevel = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.blur();
     soundEngine.unlock();
-    setCameraView('angled');
     setCenterLevelSignal((s) => s + 1);
     showTempBanner('Plansza wypoziomowana i wyśrodkowana', 1800);
   };
@@ -284,11 +343,34 @@ export default function App() {
       mode === 'single' ? `${startName} → ${targetName}` : 'Kurier Powiatu (3 kulki)';
 
     setWinOverlay({ timeMs: finalTime, routeLabel });
+  }, [elapsedMs, mode, singleRoute.startId, singleRoute.targetId]);
 
-    autoNextTimeoutRef.current = window.setTimeout(() => {
-      drawNextRoute();
-    }, 2800);
-  }, [drawNextRoute, elapsedMs, mode, singleRoute.startId, singleRoute.targetId]);
+  // Auto-return to 3D Intro flyover after 10 seconds of inactivity on win/loss summary screen
+  useEffect(() => {
+    const isSummaryOpen = (Boolean(winOverlay) || outOfLives) && !introActive;
+    if (!isSummaryOpen) return;
+
+    let idleTimer: number | null = null;
+    const scheduleReturnToIntro = () => {
+      if (idleTimer !== null) window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => {
+        resetCurrentRun();
+        setIntroActive(true);
+      }, 10000);
+    };
+
+    scheduleReturnToIntro();
+    window.addEventListener('pointerdown', scheduleReturnToIntro);
+    window.addEventListener('touchstart', scheduleReturnToIntro, { passive: true });
+    window.addEventListener('keydown', scheduleReturnToIntro);
+
+    return () => {
+      if (idleTimer !== null) window.clearTimeout(idleTimer);
+      window.removeEventListener('pointerdown', scheduleReturnToIntro);
+      window.removeEventListener('touchstart', scheduleReturnToIntro);
+      window.removeEventListener('keydown', scheduleReturnToIntro);
+    };
+  }, [winOverlay, outOfLives, introActive, resetCurrentRun]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -298,8 +380,9 @@ export default function App() {
 
   const handleSkipIntro = useCallback(() => {
     soundEngine.unlock();
+    void unlockGyroOnGesture(false);
     setIntroActive(false);
-  }, []);
+  }, [unlockGyroOnGesture]);
 
   useEffect(() => {
     if (!introActive) return;
@@ -316,6 +399,12 @@ export default function App() {
   const startNode = NODE_MAP.get(singleRoute.startId);
   const targetNode = NODE_MAP.get(singleRoute.targetId);
 
+  const setVirtualAxis = (pitch: number, roll: number) => {
+    soundEngine.unlock();
+    setVirtualTilt({ pitch, roll });
+  };
+  const clearVirtualAxis = () => setVirtualTilt({ pitch: 0, roll: 0 });
+
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-[#120b06] text-stone-100 select-none">
       {/* Fullscreen 3D WebGL Board */}
@@ -329,6 +418,8 @@ export default function App() {
         gyroEnabled={gyroEnabled}
         calibrateSignal={calibrateSignal}
         centerLevelSignal={centerLevelSignal}
+        virtualTilt={virtualTilt}
+        targetInfoText={typedInfo}
         onTrapFall={handleTrapFall}
         onBallDelivered={handleBallDelivered}
         onRouteComplete={handleRouteComplete}
@@ -360,107 +451,115 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Compact HUD */}
+      {/* Top Compact HUD — Full-width vertical 3-row stack + controls strip */}
       {!introActive && (
-      <header className="pointer-events-none fixed top-0 left-0 right-0 z-20 p-2.5 sm:p-4 flex flex-col gap-2">
-        <div className="mx-auto w-full max-w-4xl flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#18100a]/92 border border-amber-500/25 px-3.5 py-2.5 shadow-xl pointer-events-auto">
-          {/* Mission Prompt */}
-          <div className="min-w-0 flex-1">
+      <header className="pointer-events-none fixed top-0 left-0 right-0 z-20 p-2 sm:p-3.5 flex flex-col gap-2">
+        <div className="mx-auto w-full max-w-4xl flex flex-col gap-1.5 rounded-2xl bg-[#18100a]/92 border border-amber-500/25 px-3 py-2 sm:px-4 sm:py-2.5 shadow-xl pointer-events-auto">
+          {/* Row 1: Main Title (full width, single line, clamp sized) */}
+          <div
+            className="w-full font-display font-extrabold tracking-wide text-amber-300 leading-tight whitespace-nowrap"
+            style={{ fontSize: 'clamp(13px, 3.8vw, 18px)' }}
+          >
+            LABIRYNT POWIATU RACIBORSKIEGO 3D
+          </div>
+
+          {/* Row 2: Author attribution (exactly 50% smaller than main title) */}
+          <div
+            className="w-full font-medium text-amber-200/85 leading-tight"
+            style={{ fontSize: 'clamp(6.5px, 1.9vw, 9px)' }}
+          >
+            Koncepcja i realizacja: Artur Wierzbicki
+          </div>
+
+          {/* Row 3: Full route task (100% visible without ellipsis/truncation) */}
+          <div className="w-full">
             {mode === 'single' ? (
-              <div className="flex flex-col">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-[11px] font-semibold text-amber-300 tracking-wide">
-                    Labirynt Powiatu Raciborskiego 3D
-                  </span>
-                  <span className="text-[11px] font-medium text-amber-200/80">
-                    · Koncepcja i realizacja: Artur Wierzbicki
-                  </span>
-                </div>
-                <p className="font-display text-sm sm:text-base font-semibold text-stone-100 truncate">
-                  Zadanie: Doprowadź kulkę z{' '}
-                  <span className="text-amber-400">
-                    [{startNode?.id} {startNode?.shortName}]
-                  </span>{' '}
-                  do{' '}
-                  <span className="text-emerald-400">
-                    [{targetNode?.id} {targetNode?.shortName}]
-                  </span>
-                </p>
-              </div>
+              <p
+                className="font-display font-semibold text-stone-100 leading-snug break-words"
+                style={{ fontSize: 'clamp(11px, 3.2vw, 14.5px)', textOverflow: 'clip' }}
+              >
+                Zadanie: Z{' '}
+                <span className="text-amber-400">
+                  {startNode?.id} {startNode?.shortName}
+                </span>{' '}
+                do{' '}
+                <span className="text-emerald-400">
+                  {targetNode?.id} {targetNode?.shortName}
+                </span>
+              </p>
             ) : (
-              <div className="flex flex-col">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-[11px] font-semibold text-amber-300 tracking-wide">
-                    Labirynt Powiatu Raciborskiego 3D — Kurier (3 Kulki)
-                  </span>
-                  <span className="text-[11px] font-medium text-amber-200/80">
-                    · Koncepcja i realizacja: Artur Wierzbicki
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs sm:text-sm font-medium">
-                  {courierMissions.map((m, idx) => {
-                    const tNode = NODE_MAP.get(m.targetId);
-                    const done = deliveredKeys.has(m.key);
-                    return (
-                      <React.Fragment key={m.key}>
-                        {idx > 0 && (
-                          <span aria-hidden="true" className="text-stone-600">
-                            ·
-                          </span>
-                        )}
-                        <span
-                          className={`inline-flex items-center gap-1.5 ${
-                            done ? 'line-through text-stone-500' : 'text-stone-100'
-                          }`}
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: m.uiColor }}
-                          />
-                          <span>
-                            {m.label} → {tNode?.id} {tNode?.shortName}
-                          </span>
+              <div
+                className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-medium leading-snug"
+                style={{ fontSize: 'clamp(10px, 2.8vw, 13px)' }}
+              >
+                {courierMissions.map((m, idx) => {
+                  const tNode = NODE_MAP.get(m.targetId);
+                  const done = deliveredKeys.has(m.key);
+                  return (
+                    <React.Fragment key={m.key}>
+                      {idx > 0 && (
+                        <span aria-hidden="true" className="text-stone-600">
+                          ·
                         </span>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
+                      )}
+                      <span
+                        className={`inline-flex items-center gap-1 ${
+                          done ? 'line-through text-stone-500' : 'text-stone-100'
+                        }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: m.uiColor }}
+                        />
+                        <span>
+                          {m.label} → {tNode?.id} {tNode?.shortName}
+                        </span>
+                      </span>
+                    </React.Fragment>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* Metrics & Utility Controls */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <div className="flex items-center gap-2.5 text-xs sm:text-sm pr-1">
-              <div className="text-right">
-                <div className="font-mono-tabular font-bold text-amber-200 leading-tight">
-                  {formatTime(elapsedMs)}
-                </div>
-                <div className="text-[11px] text-stone-400 font-mono-tabular">
-                  Próby: {attemptsLeft}/3
-                  {completedCount > 0 ? ` · Trasy: ${completedCount}` : ''}
-                </div>
-              </div>
+          {/* Row 4: Metrics & Camera/Audio Controls */}
+          <div className="w-full flex items-center justify-between gap-2 pt-1 border-t border-amber-500/15">
+            <div className="flex items-center gap-2.5 text-xs sm:text-sm">
+              <span className="font-mono-tabular font-bold text-amber-200 leading-tight">
+                {formatTime(elapsedMs)}
+              </span>
+              <span className="text-[11px] text-stone-400 font-mono-tabular">
+                Próby: {attemptsLeft}/3
+                {completedCount > 0 ? ` · Trasy: ${completedCount}` : ''}
+              </span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setCameraView((v) => (v === 'angled' ? 'top' : 'angled'))}
-              title={cameraView === 'angled' ? 'Przełącz na widok z góry' : 'Przełącz na widok 3D'}
-              className="min-w-[40px] min-h-[40px] px-2.5 rounded-xl bg-[#271910] hover:bg-[#362216] border border-amber-500/20 text-amber-200 flex items-center gap-1.5 text-xs font-medium transition-colors cursor-pointer"
-            >
-              <Eye className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">{cameraView === 'angled' ? '3D' : 'Góra'}</span>
-            </button>
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setCameraView((v) => (v === 'follow' ? 'overview' : 'follow'))}
+                title={
+                  cameraView === 'follow'
+                    ? 'Przełącz na widok całej mapy'
+                    : 'Przełącz na śledzenie kulki'
+                }
+                className="min-h-[36px] px-2.5 rounded-xl bg-[#271910] hover:bg-[#362216] border border-amber-500/25 text-amber-200 flex items-center gap-1.5 text-[11px] sm:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Widok: {cameraView === 'follow' ? 'Śledź kulkę' : 'Cała mapa'}
+                </span>
+              </button>
 
-            <button
-              type="button"
-              onClick={toggleMute}
-              aria-label={muted ? 'Włącz dźwięk' : 'Wycisz dźwięk'}
-              className="min-w-[40px] min-h-[40px] rounded-xl bg-[#271910] hover:bg-[#362216] border border-amber-500/20 text-amber-200 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            </button>
+              <button
+                type="button"
+                onClick={toggleMute}
+                aria-label={muted ? 'Włącz dźwięk' : 'Wycisz dźwięk'}
+                className="min-w-[36px] min-h-[36px] rounded-xl bg-[#271910] hover:bg-[#362216] border border-amber-500/25 text-amber-200 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -543,7 +642,7 @@ export default function App() {
 
       {/* Collapsible Bottom-Left Control Dock (leaves bottom-center hole 15 Granica PL/CZ unobstructed) */}
       {!introActive && (
-      <div className="fixed bottom-3 left-3 z-20 max-w-[calc(100vw-1.5rem)] sm:max-w-[450px] flex flex-col items-start pointer-events-none">
+      <div className="fixed bottom-3 left-3 z-20 max-w-[54vw] sm:max-w-[440px] flex flex-col items-start pointer-events-none">
         <button
           type="button"
           onClick={(e) => {
@@ -659,12 +758,132 @@ export default function App() {
               <PWAInstallButton />
             </div>
 
-            {/* Control hint & live tilt */}
-            <div className="hidden lg:flex items-center gap-3 text-[11px] text-stone-400 font-mono-tabular">
-              <span>WASD / Strzałki / Przeciągnij</span>
-              <span>
-                {tiltReadout.pitch.toFixed(0)}° / {tiltReadout.roll.toFixed(0)}°
-              </span>
+            {/* Touch Thumb Arrow Pad (▲ ▼ ◄ ►) + Control hint */}
+            <div className="w-full flex items-center justify-between gap-2 pt-1 border-t border-amber-500/15">
+              <div className="grid grid-cols-3 gap-1 w-[132px] shrink-0 touch-none select-none">
+                <div />
+                <button
+                  type="button"
+                  aria-label="Przechyl w górę"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    setVirtualAxis(-1, 0);
+                  }}
+                  onPointerUp={clearVirtualAxis}
+                  onPointerLeave={clearVirtualAxis}
+                  onPointerCancel={clearVirtualAxis}
+                  className="min-h-[38px] rounded-lg bg-[#2a1b11] active:bg-amber-500 active:text-stone-950 border border-amber-400/35 text-amber-200 flex items-center justify-center cursor-pointer"
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </button>
+                <div />
+                <button
+                  type="button"
+                  aria-label="Przechyl w lewo"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    setVirtualAxis(0, -1);
+                  }}
+                  onPointerUp={clearVirtualAxis}
+                  onPointerLeave={clearVirtualAxis}
+                  onPointerCancel={clearVirtualAxis}
+                  className="min-h-[38px] rounded-lg bg-[#2a1b11] active:bg-amber-500 active:text-stone-950 border border-amber-400/35 text-amber-200 flex items-center justify-center cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Przechyl w dół"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    setVirtualAxis(1, 0);
+                  }}
+                  onPointerUp={clearVirtualAxis}
+                  onPointerLeave={clearVirtualAxis}
+                  onPointerCancel={clearVirtualAxis}
+                  className="min-h-[38px] rounded-lg bg-[#2a1b11] active:bg-amber-500 active:text-stone-950 border border-amber-400/35 text-amber-200 flex items-center justify-center cursor-pointer"
+                >
+                  <ArrowDown className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Przechyl w prawo"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    setVirtualAxis(0, 1);
+                  }}
+                  onPointerUp={clearVirtualAxis}
+                  onPointerLeave={clearVirtualAxis}
+                  onPointerCancel={clearVirtualAxis}
+                  className="min-h-[38px] rounded-lg bg-[#2a1b11] active:bg-amber-500 active:text-stone-950 border border-amber-400/35 text-amber-200 flex items-center justify-center cursor-pointer"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex flex-col items-end text-right text-[10px] sm:text-[11px] text-stone-400 font-mono-tabular leading-tight">
+                <span>Pinch / Kółko = Zoom</span>
+                <span className="hidden sm:inline">WASD / Strzałki / Mysz</span>
+                <span>
+                  {tiltReadout.pitch.toFixed(0)}° / {tiltReadout.roll.toFixed(0)}°
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Collapsible Bottom-Right Target Town Info Bubble (Typewriter Effect) */}
+      {!introActive && (
+      <div className="fixed bottom-7 right-3 z-20 flex flex-col items-end pointer-events-none">
+        {infoCollapsed ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              setInfoCollapsed(false);
+            }}
+            className="pointer-events-auto px-3 py-1.5 rounded-xl bg-[#18100a]/92 border border-amber-500/35 text-xs font-medium text-amber-200 hover:text-amber-100 flex items-center gap-1.5 shadow-xl cursor-pointer"
+          >
+            <Info className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Cel: {targetFact.title}</span>
+            <ChevronUp className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <div className="pointer-events-auto w-[41vw] min-w-[165px] max-w-[235px] sm:w-[270px] sm:max-w-none rounded-2xl bg-[#18100a]/94 border border-amber-500/35 px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-2xl">
+            <div className="flex items-center justify-between gap-2 pb-1 border-b border-amber-500/20">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider truncate">
+                  Cel: {typedInfo.title || '…'}
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label="Zwiń opis miejscowości"
+                onClick={(e) => {
+                  e.currentTarget.blur();
+                  setInfoCollapsed(true);
+                }}
+                className="p-1 rounded-lg hover:bg-[#2a1b11] text-amber-200/80 hover:text-amber-100 cursor-pointer"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="mt-1.5 space-y-0.5 text-[11px] sm:text-xs leading-snug">
+              <div className="text-stone-200">
+                <span className="text-stone-400">Powstanie:</span>{' '}
+                <span className="font-medium">{typedInfo.era}</span>
+              </div>
+              <div className="text-stone-200">
+                <span className="text-stone-400">Mieszkańcy:</span>{' '}
+                <span className="font-medium">{typedInfo.population}</span>
+              </div>
+              <div className="text-emerald-300">
+                <span className="text-stone-400">Do Starostwa w Raciborzu:</span>{' '}
+                <span className="font-semibold">{typedInfo.distance}</span>
+              </div>
             </div>
           </div>
         )}

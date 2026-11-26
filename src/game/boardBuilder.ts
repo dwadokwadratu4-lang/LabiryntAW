@@ -44,6 +44,7 @@ export interface BuiltBoard {
   riverMat: THREE.MeshPhysicalMaterial;
   riverTex: THREE.CanvasTexture;
   reservoirTex: THREE.CanvasTexture;
+  updateInfoPlaque: (title: string, era: string, population: string, distance: string) => void;
   dispose: () => void;
 }
 
@@ -879,12 +880,82 @@ export function buildRaciborzBoard(renderer: THREE.WebGLRenderer): BuiltBoard {
     });
   }
 
+  // 7. Bottom-right 3D Target Town Info Plaque (with typewriter updates)
+  const infoCanvas = document.createElement('canvas');
+  infoCanvas.width = 640;
+  infoCanvas.height = 320;
+  const infoCtx = infoCanvas.getContext('2d')!;
+  const infoTex = new THREE.CanvasTexture(infoCanvas);
+  infoTex.colorSpace = THREE.SRGBColorSpace;
+  infoTex.anisotropy = maxAniso;
+
+  const drawInfoCanvas = (title: string, era: string, population: string, distance: string) => {
+    const g = infoCtx.createLinearGradient(0, 0, 0, 320);
+    g.addColorStop(0, '#18100a');
+    g.addColorStop(1, '#0b0704');
+    infoCtx.fillStyle = g;
+    infoCtx.fillRect(0, 0, 640, 320);
+
+    infoCtx.strokeStyle = '#e5b84b';
+    infoCtx.lineWidth = 8;
+    infoCtx.strokeRect(10, 10, 620, 300);
+
+    infoCtx.fillStyle = '#fbbf24';
+    infoCtx.font = '700 22px "Outfit", sans-serif';
+    infoCtx.textAlign = 'left';
+    infoCtx.textBaseline = 'top';
+    infoCtx.fillText('CEL PODRÓŻY:', 30, 26);
+
+    infoCtx.fillStyle = '#fff9e6';
+    infoCtx.font = '800 38px "Plus Jakarta Sans", sans-serif';
+    infoCtx.fillText(title, 30, 56, 580);
+
+    infoCtx.strokeStyle = 'rgba(229, 184, 75, 0.35)';
+    infoCtx.lineWidth = 2;
+    infoCtx.beginPath();
+    infoCtx.moveTo(30, 112);
+    infoCtx.lineTo(610, 112);
+    infoCtx.stroke();
+
+    infoCtx.fillStyle = '#d6d3d1';
+    infoCtx.font = '600 25px "Plus Jakarta Sans", sans-serif';
+    infoCtx.fillText(`Powstanie: ${era}`, 30, 130, 580);
+    infoCtx.fillText(`Ludność: ${population}`, 30, 182, 580);
+    infoCtx.fillStyle = '#6ee7b7';
+    infoCtx.fillText(`Do Starostwa: ${distance}`, 30, 234, 580);
+
+    infoTex.needsUpdate = true;
+  };
+  drawInfoCanvas('Racibórz', '', '', '');
+
+  const infoMat = new THREE.MeshStandardMaterial({
+    map: infoTex,
+    roughness: 0.34,
+    metalness: 0.25,
+  });
+  const infoGeo = new THREE.BoxGeometry(5.6, 0.14, 2.75);
+  const infoPlaque = new THREE.Mesh(infoGeo, [
+    brassMat,
+    brassMat,
+    infoMat,
+    brassMat,
+    brassMat,
+    brassMat,
+  ]);
+  infoPlaque.position.set(8.6, 0.42, 10.65);
+  infoPlaque.rotation.x = 0.16;
+  infoPlaque.castShadow = true;
+  infoPlaque.receiveShadow = true;
+  boardGroup.add(infoPlaque);
+  disposables.push(infoTex, infoMat, infoGeo);
+
   return {
     boardGroup,
     nodes,
     riverMat,
     riverTex,
     reservoirTex,
+    updateInfoPlaque: drawInfoCanvas,
     dispose: () => {
       disposables.forEach((d) => d.dispose());
     },

@@ -8,6 +8,130 @@ export interface TownNode {
   isBorderExit?: boolean;
 }
 
+export interface TownFact {
+  title: string;
+  era: string;
+  population: string;
+  distanceToStarostwo: string;
+}
+
+export const TOWN_FACTS: Record<number, TownFact> = {
+  1: {
+    title: 'Kuźnia Raciborska',
+    era: 'XVII w. (ok. 1641 r.)',
+    population: 'ok. 5 100 mieszk.',
+    distanceToStarostwo: '15,8 km',
+  },
+  2: {
+    title: 'Rudy',
+    era: 'XIII w. (ok. 1258 r.)',
+    population: 'ok. 2 900 mieszk.',
+    distanceToStarostwo: '16,5 km',
+  },
+  3: {
+    title: 'Nędza',
+    era: 'XVII w. (ok. 1621 r.)',
+    population: 'ok. 3 400 mieszk.',
+    distanceToStarostwo: '10,2 km',
+  },
+  4: {
+    title: 'Rudnik',
+    era: 'XIV w. (ok. 1305 r.)',
+    population: 'ok. 1 900 mieszk.',
+    distanceToStarostwo: '8,4 km',
+  },
+  5: {
+    title: 'Modzurów',
+    era: 'XIII w. (ok. 1274 r.)',
+    population: 'ok. 450 mieszk.',
+    distanceToStarostwo: '14,6 km',
+  },
+  6: {
+    title: 'Pawłów',
+    era: 'XIV w. (ok. 1378 r.)',
+    population: 'ok. 1 050 mieszk.',
+    distanceToStarostwo: '11,2 km',
+  },
+  7: {
+    title: 'Pietrowice Wielkie',
+    era: 'XIV w. (ok. 1317 r.)',
+    population: 'ok. 2 400 mieszk.',
+    distanceToStarostwo: '11,8 km',
+  },
+  8: {
+    title: 'Krzanowice',
+    era: 'XIII w. (ok. 1265 r.)',
+    population: 'ok. 2 150 mieszk.',
+    distanceToStarostwo: '14,2 km',
+  },
+  9: {
+    title: 'Racibórz',
+    era: 'XII w. (ok. 1108 r.)',
+    population: 'ok. 52 500 mieszk.',
+    distanceToStarostwo: '0,0 km – siedziba Starostwa',
+  },
+  10: {
+    title: 'Kornowac',
+    era: 'XIV w. (ok. 1308 r.)',
+    population: 'ok. 1 100 mieszk.',
+    distanceToStarostwo: '9,4 km',
+  },
+  11: {
+    title: 'Tworków',
+    era: 'XIII w. (ok. 1258 r.)',
+    population: 'ok. 2 800 mieszk.',
+    distanceToStarostwo: '11,0 km',
+  },
+  12: {
+    title: 'Krzyżanowice',
+    era: 'XIII w. (ok. 1285 r.)',
+    population: 'ok. 2 100 mieszk.',
+    distanceToStarostwo: '15,4 km',
+  },
+  13: {
+    title: 'Chałupki',
+    era: 'XIV w. (ok. 1373 r.)',
+    population: 'ok. 1 750 mieszk.',
+    distanceToStarostwo: '21,5 km',
+  },
+  14: {
+    title: 'Granica PL/CZ (Pietraszyn)',
+    era: 'Przejście przygraniczne',
+    population: 'strefa graniczna',
+    distanceToStarostwo: '17,8 km',
+  },
+  15: {
+    title: 'Granica PL/CZ (Chałupki)',
+    era: 'Przejście nad Odrą',
+    population: 'strefa graniczna',
+    distanceToStarostwo: '22,4 km',
+  },
+  16: {
+    title: 'Kierunek Kędzierzyn-Koźle',
+    era: 'Szlak północno-zachodni',
+    population: 'wylot DK45',
+    distanceToStarostwo: '18,5 km',
+  },
+  17: {
+    title: 'Kierunek Gliwice',
+    era: 'Szlak przez Lasy Rudzkie',
+    population: 'wylot DW919',
+    distanceToStarostwo: '21,0 km',
+  },
+  18: {
+    title: 'Kierunek Rybnik',
+    era: 'Szlak wschodni',
+    population: 'wylot DW935',
+    distanceToStarostwo: '13,5 km',
+  },
+  19: {
+    title: 'Kierunek Głubczyce',
+    era: 'Szlak zachodni',
+    population: 'wylot DW416',
+    distanceToStarostwo: '16,2 km',
+  },
+};
+
 export interface RoadSegment {
   id: string;
   ax: number;

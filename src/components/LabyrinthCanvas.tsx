@@ -11,12 +11,12 @@ import {
   evaluateGrooveGradient,
   evaluateGrooveSDF,
 } from '../game/mapData';
-import { buildRaciborzBoard, createMarbleMesh } from '../game/boardBuilder';
+import { BuiltBoard, buildRaciborzBoard, createMarbleMesh } from '../game/boardBuilder';
 import { buildLivingWorld, InteractableHit } from '../game/livingWorld';
 import { soundEngine } from '../game/soundEngine';
 
 export type GameMode = 'single' | 'courier3';
-export type CameraViewMode = 'angled' | 'top';
+export type CameraViewMode = 'follow' | 'overview';
 
 export interface ActiveBallMission {
   key: 'gold' | 'silver' | 'copper';
@@ -25,6 +25,13 @@ export interface ActiveBallMission {
   targetId: number;
   colorHex: number;
   uiColor: string;
+}
+
+export interface TargetInfoText {
+  title: string;
+  era: string;
+  population: string;
+  distance: string;
 }
 
 export interface LabyrinthCanvasProps {
@@ -37,6 +44,8 @@ export interface LabyrinthCanvasProps {
   gyroEnabled: boolean;
   calibrateSignal: number;
   centerLevelSignal: number;
+  virtualTilt?: { pitch: number; roll: number };
+  targetInfoText?: TargetInfoText;
   onTrapFall: (ballLabel: string, holeName: string) => void;
   onBallDelivered: (ballKey: string, remaining: number) => void;
   onRouteComplete: () => void;
@@ -87,6 +96,8 @@ const _dummyMatrix = new THREE.Matrix4();
 const _dummyPos = new THREE.Vector3();
 const _dummyScale = new THREE.Vector3();
 const _dummyQuat = new THREE.Quaternion();
+const _ballWorld = new THREE.Vector3();
+const _boardEuler = new THREE.Euler();
 
 export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
   mode,
@@ -98,6 +109,8 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
   gyroEnabled,
   calibrateSignal,
   centerLevelSignal,
+  virtualTilt,
+  targetInfoText,
   onTrapFall,
   onBallDelivered,
   onRouteComplete,
@@ -105,6 +118,7 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
   onTiltChange,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const builtBoardRef = useRef<BuiltBoard | null>(null);
 
   const propsRef = useRef({
     mode,
@@ -113,6 +127,8 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     isPaused,
     cameraView,
     gyroEnabled,
+    virtualTilt,
+    targetInfoText,
     onTrapFall,
     onBallDelivered,
     onRouteComplete,
@@ -126,6 +142,8 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     isPaused,
     cameraView,
     gyroEnabled,
+    virtualTilt,
+    targetInfoText,
     onTrapFall,
     onBallDelivered,
     onRouteComplete,
@@ -142,7 +160,11 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     calBeta: 0,
     calGamma: 0,
   });
+  const ROUTE_PREVIEW_SEC = 2.5;
   const snapFlatRef = useRef(false);
+  const userZoomRef = useRef(1.0);
+  const routePreviewTimerRef = useRef(ROUTE_PREVIEW_SEC);
+  const prevIntroRef = useRef(introActive);
 
   // Sync calibration signal (phone gyro zeroing)
   useEffect(() => {
@@ -152,13 +174,14 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     }
   }, [calibrateSignal]);
 
-  // Sync center/level signal (immediate flat board + centered camera)
+  // Sync center/level signal (immediate flat board + centered camera + reset zoom)
   useEffect(() => {
     if (centerLevelSignal > 0) {
       keysRef.current.clear();
       dragTiltRef.current.active = false;
       dragTiltRef.current.pitch = 0;
       dragTiltRef.current.roll = 0;
+      userZoomRef.current = 1.0;
       if (gyroRef.current.hasReading) {
         gyroRef.current.calBeta = gyroRef.current.rawBeta;
         gyroRef.current.calGamma = gyroRef.current.rawGamma;
@@ -167,11 +190,34 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     }
   }, [centerLevelSignal]);
 
+  // Update 3D bottom-right Target Town Info Plaque cleanly as typewriter reveals text
+  useEffect(() => {
+    if (builtBoardRef.current && targetInfoText) {
+      builtBoardRef.current.updateInfoPlaque(
+        targetInfoText.title,
+        targetInfoText.era,
+        targetInfoText.population,
+        targetInfoText.distance
+      );
+    }
+  }, [targetInfoText]);
+
+  // Trigger 2.5-second full-map preview right when intro finishes so Target B is visible
+  useEffect(() => {
+    if (prevIntroRef.current && !introActive) {
+      routePreviewTimerRef.current = ROUTE_PREVIEW_SEC;
+    }
+    prevIntroRef.current = introActive;
+  }, [introActive]);
+
   const resetBallsRef = useRef<((newMissions: ActiveBallMission[]) => void) | null>(null);
 
   useEffect(() => {
     if (resetBallsRef.current) {
       resetBallsRef.current(missions);
+    }
+    if (!propsRef.current.introActive) {
+      routePreviewTimerRef.current = ROUTE_PREVIEW_SEC;
     }
   }, [missions, runId, mode]);
 
@@ -264,6 +310,15 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     scene.add(tableMesh);
 
     const builtBoard = buildRaciborzBoard(renderer);
+    builtBoardRef.current = builtBoard;
+    if (propsRef.current.targetInfoText) {
+      builtBoard.updateInfoPlaque(
+        propsRef.current.targetInfoText.title,
+        propsRef.current.targetInfoText.era,
+        propsRef.current.targetInfoText.population,
+        propsRef.current.targetInfoText.distance
+      );
+    }
     scene.add(builtBoard.boardGroup);
 
     const livingWorld = buildLivingWorld();
@@ -272,6 +327,41 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     const targetPointLight = new THREE.PointLight(0x10b981, 2.4, 8.5, 1.6);
     targetPointLight.position.set(0, 1.5, 0);
     builtBoard.boardGroup.add(targetPointLight);
+
+    // Giant vivid green 3D vertical arrow pointing directly down into Target Hole B during the 2.5s start preview
+    const bigArrowGroup = new THREE.Group();
+    bigArrowGroup.visible = false;
+    const arrowMat = new THREE.MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x16a34a,
+      emissiveIntensity: 1.35,
+      roughness: 0.22,
+      metalness: 0.15,
+    });
+    const arrowRingMat = new THREE.MeshBasicMaterial({
+      color: 0x4ade80,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+    });
+    const arrowShaftGeo = new THREE.CylinderGeometry(0.32, 0.32, 2.6, 16);
+    const arrowShaft = new THREE.Mesh(arrowShaftGeo, arrowMat);
+    arrowShaft.position.y = 1.95;
+    arrowShaft.castShadow = true;
+
+    const arrowHeadGeo = new THREE.ConeGeometry(0.92, 1.65, 16);
+    arrowHeadGeo.rotateX(Math.PI); // Tip points straight down (-Y) into the target hole
+    const arrowHead = new THREE.Mesh(arrowHeadGeo, arrowMat);
+    arrowHead.position.y = 0.2;
+    arrowHead.castShadow = true;
+
+    const arrowRingGeo = new THREE.RingGeometry(0.7, 1.25, 28);
+    arrowRingGeo.rotateX(-Math.PI / 2);
+    const arrowRing = new THREE.Mesh(arrowRingGeo, arrowRingMat);
+    arrowRing.position.y = -0.82;
+
+    bigArrowGroup.add(arrowShaft, arrowHead, arrowRing);
+    builtBoard.boardGroup.add(bigArrowGroup);
 
     const MAX_SPARKS = 80;
     const sparkGeo = new THREE.OctahedronGeometry(0.11, 0);
@@ -390,12 +480,46 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     rebuildBalls(propsRef.current.missions);
 
     /**
-     * Responsive camera distance from aspect ratio (window.innerWidth / window.innerHeight).
-     * On wide PC monitors, board fills ~85% of viewport height from a slight 3D perspective angle.
-     * On portrait phones, board width fits inside viewport with comfortable margins.
+     * Responsive camera positioning supporting:
+     * - 'follow': 1/4 county board zoomed onto active marble (~2.2x zoom, pinch/wheel adjustable)
+     * - 'overview': full county board framed cleanly (also used for 2s route start preview)
      */
     const updateCameraDesiredPos = (w: number, h: number, viewMode: CameraViewMode) => {
       const aspect = Math.max(0.35, w / Math.max(1, h));
+      const zoom = userZoomRef.current;
+
+      if (viewMode === 'follow') {
+        const activeBall =
+          simBalls.find((b) => b.state === 'active') ??
+          simBalls.find((b) => b.state !== 'locked') ??
+          simBalls[0];
+
+        let bx = 0;
+        let bz = 0;
+        if (activeBall) {
+          bx = activeBall.x;
+          bz = activeBall.z;
+        } else if (propsRef.current.missions[0]) {
+          const sNode = NODE_MAP.get(propsRef.current.missions[0].startId);
+          if (sNode) {
+            bx = sNode.x;
+            bz = sNode.z;
+          }
+        }
+
+        _boardEuler.set(currentPitch, 0, -currentRoll, 'XYZ');
+        _ballWorld.set(bx, 0.22, bz).applyEuler(_boardEuler);
+
+        const followHeight = (aspect < 1 ? 15.0 : 12.8) / zoom;
+        _camDesiredLookAt.copy(_ballWorld);
+        _camTargetPos.set(
+          _ballWorld.x,
+          _ballWorld.y + followHeight,
+          _ballWorld.z + followHeight * 0.36
+        );
+        return;
+      }
+
       const fovRad = THREE.MathUtils.degToRad(camera.fov);
       const tanHalfFov = Math.tan(fovRad / 2);
 
@@ -403,16 +527,17 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
       const totalWidth = BOARD_WIDTH + 1.8;
       const totalDepth = BOARD_DEPTH + 1.8;
 
-      const tiltFactor = viewMode === 'top' ? 0.08 : 0.34;
+      const tiltFactor = 0.34;
       const cosPitchApprox = 1 / Math.hypot(1, tiltFactor);
 
-      // Fit board vertically (~85% of height on widescreen PC) and horizontally (90% on portrait phone)
+      // Fit board vertically (~84% of height on widescreen PC) and horizontally (90% on portrait phone)
       const distForHeight = (totalDepth * cosPitchApprox) / (2 * tanHalfFov * 0.84);
       const distForWidth = totalWidth / (2 * tanHalfFov * aspect * 0.9);
-      const baseDist = Math.max(distForHeight, distForWidth);
+      const baseDist = Math.max(distForHeight, distForWidth) / zoom;
 
       const yDist = baseDist * cosPitchApprox;
       const zDist = yDist * tiltFactor;
+      _camDesiredLookAt.set(0, 0, 0.25);
       _camTargetPos.set(0, yDist, zDist);
     };
 
@@ -424,7 +549,7 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
       renderer.compile(scene, camera);
     }
 
-    // Keyboard & Pointer controls
+    // Keyboard & Pointer controls (including 2-finger Pinch-to-Zoom & Mouse Wheel Zoom)
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(k)) {
@@ -436,8 +561,14 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     const onKeyUp = (e: KeyboardEvent) => {
       keysRef.current.delete(e.key.toLowerCase());
     };
+    const activePointers = new Map<number, { x: number; y: number }>();
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1.0;
+
     const onBlur = () => {
       keysRef.current.clear();
+      activePointers.clear();
+      pinchStartDist = 0;
       dragTiltRef.current.active = false;
       dragTiltRef.current.pitch = 0;
       dragTiltRef.current.roll = 0;
@@ -465,14 +596,50 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
       return null;
     };
 
+    const getTwoPointerDist = (): number => {
+      const pts = Array.from(activePointers.values());
+      if (pts.length < 2) return 0;
+      return Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    };
+
     const onPointerDown = (e: PointerEvent) => {
       soundEngine.unlock();
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (activePointers.size >= 2) {
+        // Switch cleanly into 2-finger Pinch-to-Zoom mode
+        dragTiltRef.current.active = false;
+        dragTiltRef.current.moved = true;
+        dragTiltRef.current.pitch = 0;
+        dragTiltRef.current.roll = 0;
+        pinchStartDist = getTwoPointerDist();
+        pinchStartZoom = userZoomRef.current;
+        return;
+      }
+
       dragTiltRef.current.active = true;
       dragTiltRef.current.moved = false;
       dragTiltRef.current.startX = e.clientX;
       dragTiltRef.current.startY = e.clientY;
     };
+
     const onPointerMove = (e: PointerEvent) => {
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      if (activePointers.size >= 2) {
+        const dist = getTwoPointerDist();
+        if (pinchStartDist > 8 && dist > 8) {
+          userZoomRef.current = THREE.MathUtils.clamp(
+            pinchStartZoom * (dist / pinchStartDist),
+            0.55,
+            2.4
+          );
+        }
+        return;
+      }
+
       if (!dragTiltRef.current.active) return;
       const dx = e.clientX - dragTiltRef.current.startX;
       const dy = e.clientY - dragTiltRef.current.startY;
@@ -483,18 +650,34 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
       dragTiltRef.current.roll = THREE.MathUtils.clamp(dx / sensitivity, -1, 1) * MAX_TILT_RAD;
       dragTiltRef.current.pitch = THREE.MathUtils.clamp(dy / sensitivity, -1, 1) * MAX_TILT_RAD;
     };
+
     const onPointerUp = (e: PointerEvent) => {
-      const wasTap = dragTiltRef.current.active && !dragTiltRef.current.moved;
-      dragTiltRef.current.active = false;
-      dragTiltRef.current.moved = false;
-      dragTiltRef.current.pitch = 0;
-      dragTiltRef.current.roll = 0;
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) {
+        pinchStartDist = 0;
+      }
+      const wasTap = dragTiltRef.current.active && !dragTiltRef.current.moved && activePointers.size === 0;
+      if (activePointers.size === 0) {
+        dragTiltRef.current.active = false;
+        dragTiltRef.current.moved = false;
+        dragTiltRef.current.pitch = 0;
+        dragTiltRef.current.roll = 0;
+      }
       if (wasTap && e.type === 'pointerup') {
         const hit = findInteractableHit(e.clientX, e.clientY);
         if (hit) {
           livingWorld.handleTap(hit);
         }
       }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      userZoomRef.current = THREE.MathUtils.clamp(
+        userZoomRef.current * (1 - e.deltaY * 0.0011),
+        0.55,
+        2.4
+      );
     };
 
     const onDeviceOrientation = (e: DeviceOrientationEvent) => {
@@ -526,6 +709,7 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
     window.addEventListener('resize', applyResize);
     window.addEventListener('deviceorientation', onDeviceOrientation);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
@@ -569,6 +753,11 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
       if (kbPitch !== 0 || kbRoll !== 0) {
         pitch += kbPitch * MAX_TILT_RAD * 0.9;
         roll += kbRoll * MAX_TILT_RAD * 0.9;
+      }
+
+      if (propsRef.current.virtualTilt) {
+        pitch += propsRef.current.virtualTilt.pitch * MAX_TILT_RAD * 0.9;
+        roll += propsRef.current.virtualTilt.roll * MAX_TILT_RAD * 0.9;
       }
 
       if (dragTiltRef.current.active) {
@@ -638,23 +827,47 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
           Math.cos(elapsed * 0.25) * 1.4
         );
         _camLookAt.lerp(_camDesiredLookAt, Math.min(1, dt * 3));
+        bigArrowGroup.visible = false;
       } else {
-        updateCameraDesiredPos(w, h, propsRef.current.cameraView);
-        _camDesiredLookAt.set(0, 0, 0.25);
+        if (routePreviewTimerRef.current > 0) {
+          routePreviewTimerRef.current = Math.max(0, routePreviewTimerRef.current - dt);
+        }
+        const inRoutePreview = routePreviewTimerRef.current > 0;
+        const effectiveView: CameraViewMode = inRoutePreview
+          ? 'overview'
+          : propsRef.current.cameraView;
+
+        const firstTargetId = propsRef.current.missions[0]?.targetId;
+        const previewTargetNode = firstTargetId ? NODE_MAP.get(firstTargetId) : undefined;
+        if (inRoutePreview && previewTargetNode) {
+          bigArrowGroup.visible = true;
+          const bob = Math.sin(elapsed * 8.5) * 0.42;
+          const arrowScale = 1.0 + Math.sin(elapsed * 8.5) * 0.14;
+          bigArrowGroup.position.set(previewTargetNode.x, 1.35 + bob, previewTargetNode.z);
+          bigArrowGroup.scale.setScalar(arrowScale);
+          bigArrowGroup.rotation.y = elapsed * 2.4;
+          arrowRing.scale.setScalar(1.0 + Math.sin(elapsed * 8.5) * 0.22);
+        } else {
+          bigArrowGroup.visible = false;
+        }
+
+        updateCameraDesiredPos(w, h, effectiveView);
 
         if (snapFlatRef.current) {
           currentPitch = 0;
           currentRoll = 0;
+          updateCameraDesiredPos(w, h, effectiveView);
           camera.position.copy(_camTargetPos);
           _camLookAt.copy(_camDesiredLookAt);
           snapFlatRef.current = false;
         } else {
-          camera.position.x = THREE.MathUtils.damp(camera.position.x, _camTargetPos.x, 7, dt);
-          camera.position.y = THREE.MathUtils.damp(camera.position.y, _camTargetPos.y, 7, dt);
-          camera.position.z = THREE.MathUtils.damp(camera.position.z, _camTargetPos.z, 7, dt);
-          _camLookAt.x = THREE.MathUtils.damp(_camLookAt.x, _camDesiredLookAt.x, 7, dt);
-          _camLookAt.y = THREE.MathUtils.damp(_camLookAt.y, _camDesiredLookAt.y, 7, dt);
-          _camLookAt.z = THREE.MathUtils.damp(_camLookAt.z, _camDesiredLookAt.z, 7, dt);
+          const camDamp = effectiveView === 'follow' ? 6.5 : 5.5;
+          camera.position.x = THREE.MathUtils.damp(camera.position.x, _camTargetPos.x, camDamp, dt);
+          camera.position.y = THREE.MathUtils.damp(camera.position.y, _camTargetPos.y, camDamp, dt);
+          camera.position.z = THREE.MathUtils.damp(camera.position.z, _camTargetPos.z, camDamp, dt);
+          _camLookAt.x = THREE.MathUtils.damp(_camLookAt.x, _camDesiredLookAt.x, camDamp, dt);
+          _camLookAt.y = THREE.MathUtils.damp(_camLookAt.y, _camDesiredLookAt.y, camDamp, dt);
+          _camLookAt.z = THREE.MathUtils.damp(_camLookAt.z, _camDesiredLookAt.z, camDamp, dt);
         }
       }
       camera.lookAt(_camLookAt);
@@ -975,14 +1188,21 @@ export const LabyrinthCanvas: React.FC<LabyrinthCanvasProps> = ({
       window.removeEventListener('resize', applyResize);
       window.removeEventListener('deviceorientation', onDeviceOrientation);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('wheel', onWheel);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
 
+      builtBoardRef.current = null;
       for (const b of simBalls) b.dispose();
       livingWorld.dispose();
       builtBoard.dispose();
+      arrowShaftGeo.dispose();
+      arrowHeadGeo.dispose();
+      arrowRingGeo.dispose();
+      arrowMat.dispose();
+      arrowRingMat.dispose();
       tableGeo.dispose();
       tableMat.dispose();
       sparkGeo.dispose();
