@@ -1,0 +1,6 @@
+{
+  "name": "Labirynt Powiatu Raciborskiego 3D",
+  "description": "Trójwymiarowa gra zręcznościowa WebGL/Three.js z kulkami toczącymi się w drewniano-mosiężnym labiryncie Powiatu Raciborskiego. Autor: Artur Wierzbicki.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
